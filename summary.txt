@@ -1,0 +1,717 @@
+================================================================================
+  MIGIT — COMPLETE PROJECT SUMMARY
+  Location: /home/shaz/Desktop/typescript projects/My_GIT_VERSION/migit/
+  Version: 0.1.0
+  Last updated: reflects full codebase including config, history, AI, doctor,
+                checkout guard, branch safety, .migitignore, and security rules
+================================================================================
+
+
+1. WHAT IS MIGIT?
+--------------------------------------------------------------------------------
+
+migit is a TypeScript command-line application that implements a simplified
+Git-like version control system (VCS). It is NOT a full Git replacement — it is
+a learning / prototype VCS with these goals:
+
+  • Track file changes using content-addressable storage (like Git objects)
+  • Stage files, commit snapshots, view history, manage branches
+  • Optional smart commit messages via Google Gemini API
+  • Auto-scan a codebase and produce markdown documentation
+  • Command history logging with optional AI explanation
+  • Repository health checks (doctor)
+
+Tech stack:
+  • Language: TypeScript (ES modules, compiled to dist/)
+  • CLI framework: Commander.js
+  • Runtime: Node.js (ES2022)
+  • AI (optional): Google Gemini via GEMINI_API_KEY environment variable
+  • No database — everything stored as files inside `.migit/`
+
+
+2. HOW TO RUN (GLOBAL CLI)
+--------------------------------------------------------------------------------
+
+Primary usage (after linking):
+
+  npm install
+  npm run build          # tsc + chmod +x dist/cli.js
+  npm link               # installs `migit` on your PATH
+  migit init
+  migit --help
+
+package.json bin entry:
+
+  "bin": { "migit": "./dist/cli.js" }
+
+src/cli.ts starts with:
+
+  #!/usr/bin/env node
+
+TypeScript preserves the shebang in dist/cli.js. npm link creates a global
+shim pointing at the built CLI.
+
+Development without linking:
+
+  npm start -- init
+  npm start -- status
+
+
+3. HOW THE WHOLE SYSTEM WORKS (HIGH-LEVEL FLOW)
+--------------------------------------------------------------------------------
+
+When you run `migit <command>`:
+
+  STEP 1 — ENTRY (src/cli.ts)
+    loadEnv() loads .env from cwd, repo root, or package dir.
+    Commander.js parses argv and dispatches to a subcommand handler.
+
+  STEP 2 — HISTORY WRAPPER (src/cli/with-history.ts)
+    Every command runs through withHistoryAction() → runWithHistory().
+    On success or failure, a structured JSON line is appended to
+    .migit/history.log (API keys and secrets are redacted from args).
+
+  STEP 3 — COMMAND LAYER (src/commands/*.command.ts)
+    Thin wrappers. Most use Repository.open() (walks up to find .migit).
+    init uses Repository.at(cwd) — never walks up to a parent repo.
+
+  STEP 4 — REPOSITORY DISCOVERY (src/utils/paths.ts → findRepositoryRoot)
+    Walks up from cwd until `<dir>/.migit` exists; that dir is the repo root.
+    Example: cwd = project/src/controllers → finds project/.migit → root = project/
+
+  STEP 5 — CORE LAYER (src/core/)
+    Repository orchestrates ObjectStore, IndexStore, Refs, Scanner, ConfigStore.
+
+  STEP 6 — ON DISK
+    All metadata and objects live in `.migit/` at the repo root.
+
+
+4. THE `.migit/` REPOSITORY STRUCTURE ON DISK
+--------------------------------------------------------------------------------
+
+  your-project/
+  ├── .migitignore          ← ignore patterns (created on init if missing)
+  ├── .migit/
+  │   ├── HEAD              ← "ref: refs/heads/main" (active branch)
+  │   ├── config.json       ← author + AI provider (never stores API keys)
+  │   ├── index             ← JSON array of staged/tracked files
+  │   ├── history.log       ← JSONL command audit log
+  │   ├── objects/          ← content-addressed blobs, trees, and commits (gzip)
+  │   │   └── ab/
+  │   │       └── cdef1234…
+  │   └── refs/
+  │       └── heads/
+  │           ├── main
+  │           └── feature-x
+  └── your source files…
+
+HEAD vs branch refs (critical):
+
+  .migit/HEAD                    → which branch is checked OUT
+  .migit/refs/heads/main         → latest commit ON main
+  .migit/refs/heads/feature-x    → latest commit ON feature-x
+
+  migit commit     → updates refs/heads/<current-branch> only
+  migit checkout X → updates HEAD only; restores working tree + index from X
+
+Object format on disk:
+
+  Stored as gzip( "blob <size>\0<content>" )
+         or gzip( "tree <size>\0<json-map>" )
+         or gzip( "commit <size>\0<json>" )
+  Object ID = SHA-256 of the full uncompressed header+payload string.
+
+  Tree payload: JSON object mapping repo-relative paths → blob hashes.
+  Commits reference tree hashes; trees reference blob hashes.
+
+config.json example (safe — no API keys):
+
+  {
+    "user": { "name": "...", "email": "..." },
+    "ai": { "provider": "gemini" }
+  }
+
+  Optional: "model" in ai section or MIGIT_AI_MODEL env var.
+  API key: GEMINI_API_KEY in .env only — never in config.json.
+
+history.log entry format (one JSON object per line):
+
+  {
+    "command": "commit",
+    "args": ["commit", "--smart"],
+    "status": "success",
+    "durationMs": 1234,
+    "timestamp": "2026-06-26T12:00:00.000Z"
+  }
+
+
+5. ALL CLI COMMANDS (WHAT THEY DO & HOW)
+--------------------------------------------------------------------------------
+
+5.1  migit init [-n name] [-e email]
+  • Repository.at(process.cwd()) — never discovers parent repos
+  • Creates .migit/, objects/, refs/heads/, HEAD → refs/heads/main
+  • Saves empty index [], writes config.json with author defaults
+  • Creates .migitignore with default patterns if missing
+  • Does NOT create an initial commit
+
+5.2  migit add <paths...>
+  • Rejects paths outside repo root (../ escapes blocked)
+  • Scanner walks paths; respects .migitignore + built-in ignores
+  • Each file: read bytes → objectStore.writeBlob() → hash stored in index
+  • indexStore.merge() overlays updates — never wipes entire index
+  • Staged deletion: files removed from disk within add scope are removed from index
+  • Skips: symlinks, files > 10 MB, permission-denied (with warnings)
+  • Binary files stored as blobs normally
+
+5.3  migit status
+  • Three-way compare: HEAD ↔ Index ↔ Working directory
+  • status-engine.ts loads HEAD tree, index, scans working tree
+  • Output per path: staged state + working state (or omitted if clean)
+  • Staged: added / modified / deleted (HEAD ≠ index)
+  • Working: modified / deleted / untracked (index ≠ disk)
+
+5.4  migit commit -m "message"
+  • Builds tree object from complete index via objectStore.writeTree()
+  • Creates commit object with author from config.json
+  • Updates current branch ref to new commit hash
+  • Index is NOT cleared — stays equal to HEAD after commit
+
+5.5  migit commit --smart [--paths-only] [-y]
+  • Builds structured change summary from staged files (HEAD vs index diffs)
+  • Default mode: sends metadata + redacted diff samples to Gemini (not full files)
+  • --paths-only: sends only file paths (legacy/simple mode)
+  • Excludes .env and sensitive files from analysis
+  • Gemini: 15s timeout, 1 retry, 72-char message limit, response validation
+  • Falls back to deterministic message if AI fails
+  • Prompts user to confirm message (skip with -y)
+  • Never sends API keys or .env contents to Gemini
+
+5.6  migit log [-n count]
+  • Walks parent chain from HEAD commit (default 10 commits)
+  • Prints hash, author, date, message
+
+5.7  migit branch [name] [-d]
+  • No name: list branches, * marks current
+  • With name: create branch at current HEAD
+  • With -d: delete branch ref file
+  • Safety rules (see section 10)
+
+5.8  migit checkout <branch> [-f|--force]
+  • Validates branch exists and has commits
+  • Dirty-tree protection (default): blocks if staged changes, unstaged changes
+    on tracked files, or untracked files that would be overwritten by target branch
+  • Lists conflicting file paths in error message
+  • --force skips protection and switches anyway
+  • Restores working tree from target commit tree, replaces index, updates HEAD
+
+5.9  migit config [key] [value] [--list]
+  • Get/set .migit/config.json values
+  • Keys: user.name, user.email, ai.provider, ai.model
+  • Rejects ai.key / apiKey / token keys — use GEMINI_API_KEY env instead
+  • --list prints full config JSON
+
+5.10 migit history [--explain]
+  • Shows .migit/history.log entries (command, args, status, duration)
+  • migit history explain       → plain-text summary of recent commands
+  • migit history explain --ai  → Gemini summary
+  • migit history --explain     → alias for explain --ai
+
+5.11 migit document [-o path] [--force]
+  • Runs analyzers in parallel → DOCUMENTATION.md (or custom path)
+  • Refuses to overwrite an existing output file unless --force is passed
+  • Respects .migitignore; never includes .env or credential files
+  • Output via atomicWrite()
+
+5.12 migit doctor
+  • Deep integrity checks (see section 9)
+  • Exit code 1 if any issues found
+
+
+6. IGNORE RULES (.migitignore)
+--------------------------------------------------------------------------------
+
+File: .migitignore at repository root (auto-created on init).
+
+Example patterns (gitignore-like subset):
+  node_modules/
+  dist/
+  build/
+  coverage/
+  .env
+  .env.*
+  *.log
+  uploads/
+
+Always ignored (cannot be overridden):
+  .migit/   .git/   node_modules/   .env   .env.*
+
+Implementation:
+  src/utils/ignore-rules.ts  — loads .migitignore, parses patterns, caches rules
+  src/utils/sensitive-files.ts — credential file detection
+  src/utils/ignore.ts        — shouldIgnorePath() async helper
+
+Walk policy (scanner, status, document):
+  • Reject paths outside repository root (path-guard.ts)
+  • Do not follow symbolic links
+  • Skip files > 10 MB (MAX_STAGE_FILE_BYTES)
+  • Skip permission-denied paths with warning
+  • Binary files: stored as blobs; smart-commit skips content analysis for binary
+
+
+7. REPOSITORY CONFIGURATION
+--------------------------------------------------------------------------------
+
+File: .migit/config.json
+
+  user.name / user.email  — commit author (format: "Name <email>")
+  ai.provider             — always "gemini" for now
+  ai.model                — optional; resolved via resolveAiModel():
+                            config → MIGIT_AI_MODEL env → gemini-2.5-flash default
+
+Defaults on init:
+  user.name  ← --name flag, MIGIT_USER_NAME env, OS username, or "migit user"
+  user.email ← --email flag, MIGIT_USER_EMAIL env, or "migit@localhost"
+
+Config never stores API keys. save() strips forbidden fields before writing.
+
+
+8. COMMAND HISTORY LOGGING
+--------------------------------------------------------------------------------
+
+Every subcommand is wrapped with withHistoryAction() → runWithHistory().
+
+Flow:
+  1. Record start time
+  2. Run command handler
+  3. Append JSON line to .migit/history.log (success or failed)
+  4. Args sanitized via history-sanitize.ts (redacts keys, tokens, passwords)
+  5. Errors redacted via redact-secrets.ts before persistence
+
+Special case: migit init logs after .migit/ exists (post-operation append).
+
+Files:
+  src/history/run-with-history.ts   — wrapper logic
+  src/history/history-logger.ts     — atomicAppendLine to history.log
+  src/history/history-reader.ts     — reads JSONL back
+  src/history/history-format.ts     — display + explain formatting
+  src/history/history-sanitize.ts   — argv + error redaction
+  src/cli/with-history.ts           — Commander action adapter
+
+
+9. SMART COMMIT (AI) — FULL PIPELINE
+--------------------------------------------------------------------------------
+
+Trigger: migit commit --smart
+
+Steps:
+  1. buildStagedChangeSummary() — compares HEAD vs index for each staged path
+  2. For each file: line diff stats, heuristic summary bullets, redacted diff sample
+  3. Skips sensitive files (.env, credentials) entirely
+  4. Builds JSON payload (not raw source) and sends to Gemini
+  5. gemini-client.ts: x-goog-api-key header (not in URL), 15s timeout, 1 retry
+  6. normalizeCommitMessage(): single line, max 72 chars, strip quotes/fences
+  7. fallbackMessage() if AI unavailable or response invalid
+  8. confirmCommitMessage() prompts user (unless -y)
+
+Files:
+  src/ai/staged-changes.ts    — HEAD↔index diff builder
+  src/ai/change-summary.ts    — ChangeSummary types + JSON payload
+  src/ai/diff-redactor.ts     — line diff, redaction, summary heuristics
+  src/ai/smart-commit.ts      — orchestrates prompt + fallback
+  src/ai/commit-message.ts    — validation + truncation
+  src/ai/commit-fallback.ts   — deterministic messages
+  src/ai/gemini-client.ts     — HTTP client with timeout/retry/redaction
+  src/utils/prompt-confirm.ts — interactive y/N confirmation
+
+
+10. CHECKOUT & BRANCH SAFETY
+--------------------------------------------------------------------------------
+
+Checkout guard (src/core/checkout-guard.ts):
+  Blocks checkout when:
+    • Any staged change (HEAD ≠ index)
+    • Any unstaged change on tracked files
+    • Untracked file that exists on target branch (would be overwritten)
+  Allows checkout when untracked file is NOT on target branch.
+  --force / -f skips all checks.
+
+Branch name validation (src/utils/branch-name.ts):
+  Rejects: ../main, feature/auth?, feature auth, empty, .lock suffix, etc.
+  Allows: main, feature/auth, bugfix-123
+
+Create branch:
+  Rejects if branch name already exists.
+  Rejects invalid names.
+
+Delete branch:
+  Rejects if branch does not exist.
+  Rejects if branch is currently checked out:
+    Cannot delete branch "main" because it is currently checked out.
+
+
+11. DOCTOR / INTEGRITY CHECKER
+--------------------------------------------------------------------------------
+
+IntegrityChecker (src/core/integrity-checker.ts) verifies:
+
+  • config.json exists; no forbidden secret fields
+  • .migit/HEAD exists and has valid format
+  • HEAD points to an existing branch ref
+  • Every branch ref points to valid 64-char commit hash
+  • Every object: decompress, validate header type/size, recompute SHA-256,
+    compare hash to storage path (shard + filename)
+  • Commit graph: each commit has valid tree object; parent chain walkable; no cycles
+  • Each tree object references existing blob objects (doctor rejects blob-as-tree)
+  • Index JSON valid; every index entry references existing blob
+  • No leftover .tmp metadata files in .migit/
+
+object-store.ts verifyStorage() is the foundation for object hash validation.
+
+
+12. ATOMIC WRITES (CRASH-SAFE METADATA)
+--------------------------------------------------------------------------------
+
+src/utils/atomic-write.ts
+
+  atomicWrite(path, content)     — write temp file → rename (atomic)
+  atomicAppendLine(path, line)   — read + append + atomicWrite (for history.log)
+
+Used for:
+  • .migit/index
+  • .migit/HEAD
+  • .migit/refs/heads/*
+  • .migit/config.json
+  • .migit/history.log
+  • DOCUMENTATION.md output
+  • .migitignore (on init)
+
+
+13. API KEY & SECRET PROTECTION
+--------------------------------------------------------------------------------
+
+  • GEMINI_API_KEY only in .env (never config.json, never history, never docs)
+  • .gitignore + .npmignore exclude .env and .env.*
+  • package.json "files" whitelists dist, .env.example, README for npm publish
+  • redact-secrets.ts scrubs keys from errors and log output
+  • history-sanitize.ts redacts sensitive argv values
+  • smart-commit excludes .env from analysis; diff samples are redacted
+  • gemini-client uses x-goog-api-key header, redacts error bodies
+  • config command rejects ai.key / ai.apiKey / ai.token keys
+
+
+14. CORE MODULES (src/core/) — DETAILED
+--------------------------------------------------------------------------------
+
+repository.ts
+  Central facade. Repository.open() / Repository.at().
+  Methods: init, add, commit, log, branches, checkIntegrity.
+
+object-store.ts
+  ONLY module that hashes, compresses, writes objects.
+  writeBlob(), writeTree(), writeCommit()
+  readBlob(), readTree(), readCommit()
+  parseObject() accepts blob | tree | commit headers
+  verifyStorage() — full hash + header validation
+  hashSerializedObject(), parseObject() exported for integrity checks
+
+index-store.ts
+  load(), merge(updates, removePaths?), save() — atomic writes
+
+snapshot.ts
+  loadHeadSnapshot(), createSnapshot(), parseTreeSnapshot()
+
+commit.ts
+  createCommit() — builds commit object via objectStore.writeCommit()
+
+refs.ts
+  HEAD file, branch refs, getHead(), setHead(), setCurrentBranch()
+  All writes use atomicWrite; branch names validated
+
+scanner.ts
+  stage(paths) — walk, ignore rules, path guard, lstat (no symlinks)
+
+status-engine.ts
+  getStatus() — three-way HEAD / index / working compare
+
+checkout-engine.ts
+  checkout(target, { force }) — guard, restore tree, update index + HEAD
+
+checkout-guard.ts
+  findCheckoutBlockers(), formatCheckoutBlockedMessage()
+
+integrity-checker.ts
+  IntegrityChecker.run() — full doctor checks
+
+config-store.ts
+  load/save config.json, resolveAiModel(), validate no secrets on disk
+
+
+15. DOCUMENTATION SYSTEM (src/document/)
+--------------------------------------------------------------------------------
+
+migit document runs analyzers in parallel:
+
+  project-scanner.ts      — file inventory (respects .migitignore)
+  stack-detector.ts       — languages, frameworks, runtime from package.json/tsconfig
+  package-analyzer.ts     — name, version, scripts, dependencies
+  express-analyzer.ts     — regex for .get/.post/.put/.delete routes in js/ts
+  react-analyzer.ts       — exported components + hooks in jsx/tsx
+  mongoose-analyzer.ts    — mongoose.model() + schema fields in js/ts
+  documentation-generator.ts — assembles markdown sections
+
+Output: DOCUMENTATION.md via atomicWrite (default path configurable with -o).
+
+
+16. UTILITIES (src/utils/)
+--------------------------------------------------------------------------------
+
+  paths.ts            — all .migit path builders; findRepositoryRoot()
+  path-guard.ts       — resolvePathInRepository(); reject .. escapes
+  compression.ts      — gzip for object storage
+  file-system.ts      — async read/write/mkdir/readdir
+  ignore.ts           — shouldIgnorePath(); re-exports IgnoreRules
+  ignore-rules.ts     — .migitignore parser + matcher
+  sensitive-files.ts  — .env, credentials, keys detection
+  branch-name.ts      — branch name validation
+  add-scope.ts        — scoped deletion logic for migit add
+  atomic-write.ts     — crash-safe file writes
+  redact-secrets.ts   — strip API keys from strings
+  walk-options.ts     — MAX_STAGE_FILE_BYTES, permission-denied helpers
+  load-env.ts         — dotenv from cwd / repo / package dir
+  prompt-confirm.ts   — interactive commit confirmation
+  errors.ts           — MiGitError
+
+
+17. TYPES (src/types/index.ts)
+--------------------------------------------------------------------------------
+
+  MiGitObject   → { type: blob|tree|commit, content: Buffer }
+  TreeEntry     → { mode, name, hash }
+  CommitData    → { tree, parent?, author, timestamp, message }
+  StagedEntry   → { path, hash, mode }
+  StatusEntry   → { path, staged, working }
+  RefInfo       → { name, hash }
+  MiGitConfig    → { user: {name, email}, ai: { provider, model? } }
+
+
+18. COMPLETE FILE STRUCTURE
+--------------------------------------------------------------------------------
+
+migit/
+├── package.json              bin: ./dist/cli.js, build + chmod
+├── tsconfig.json             ES2022, NodeNext modules, strict
+├── README.md                 User docs
+├── .env.example              Template (never commit real .env)
+├── .gitignore                Ignores .env, dist, node_modules
+├── .npmignore                Excludes src, tests, .env from npm pack
+│
+└── src/
+    ├── cli.ts                Entry point; #!/usr/bin/env node; registers commands
+    ├── cli/
+    │   └── with-history.ts   Wraps every command action with history logging
+    │
+    ├── commands/
+    │   ├── init.command.ts
+    │   ├── add.command.ts
+    │   ├── status.command.ts
+    │   ├── commit.command.ts       --smart, --paths-only, -y
+    │   ├── log.command.ts
+    │   ├── checkout.command.ts     -f/--force
+    │   ├── branch.command.ts
+    │   ├── history.command.ts      history explain [--ai]
+    │   ├── document.command.ts
+    │   ├── doctor.command.ts
+    │   └── config.command.ts
+    │
+    ├── core/
+    │   ├── repository.ts
+    │   ├── object-store.ts
+    │   ├── index-store.ts
+    │   ├── snapshot.ts
+    │   ├── commit.ts
+    │   ├── refs.ts
+    │   ├── scanner.ts
+    │   ├── status-engine.ts
+    │   ├── checkout-engine.ts
+    │   ├── checkout-guard.ts
+    │   ├── integrity-checker.ts
+    │   └── config-store.ts
+    │
+    ├── history/
+    │   ├── history-logger.ts
+    │   ├── history-reader.ts
+    │   ├── history-format.ts
+    │   ├── history-sanitize.ts
+    │   └── run-with-history.ts
+    │
+    ├── ai/
+    │   ├── gemini-client.ts
+    │   ├── smart-commit.ts
+    │   ├── staged-changes.ts
+    │   ├── change-summary.ts
+    │   ├── diff-redactor.ts
+    │   ├── commit-message.ts
+    │   └── commit-fallback.ts
+    │
+    ├── document/
+    │   ├── project-scanner.ts
+    │   ├── stack-detector.ts
+    │   ├── package-analyzer.ts
+    │   ├── express-analyzer.ts
+    │   ├── react-analyzer.ts
+    │   ├── mongoose-analyzer.ts
+    │   └── documentation-generator.ts
+    │
+    ├── utils/
+    │   ├── paths.ts
+    │   ├── path-guard.ts
+    │   ├── compression.ts
+    │   ├── file-system.ts
+    │   ├── ignore.ts
+    │   ├── ignore-rules.ts
+    │   ├── sensitive-files.ts
+    │   ├── branch-name.ts
+    │   ├── add-scope.ts
+    │   ├── atomic-write.ts
+    │   ├── redact-secrets.ts
+    │   ├── walk-options.ts
+    │   ├── load-env.ts
+    │   ├── prompt-confirm.ts
+    │   └── errors.ts
+    │
+    └── types/
+        └── index.ts
+
+tests/                          Node.js native test runner + tsx (40 tests)
+├── helpers/
+│   └── temp-repo.ts            Temp repo fixture (init + cleanup)
+├── object-store.test.ts        Hashing, parseObject, verifyStorage
+├── status-engine.test.ts       Three-way status (staged/working/untracked)
+├── add-scope.test.ts           Scoped deletions (add src/ must not touch lib/)
+├── checkout-guard.test.ts      Dirty-tree blocker logic
+├── branch-safety.test.ts       Branch names, duplicate/delete rules, HEAD switching
+├── history-sanitize.test.ts    Secret redaction in history args and errors
+├── ignore-rules.test.ts        .migitignore parsing and always-ignored paths
+├── smart-commit.test.ts        Fallback messages and message normalization
+├── document-output.test.ts     Document overwrite protection (--force)
+├── integration.test.ts         Checkout restoration, path guard
+└── integrity.test.ts           Doctor: missing blobs, malformed commit trees
+
+
+19. DATA FLOW DIAGRAMS (TEXT)
+--------------------------------------------------------------------------------
+
+INIT:
+  migit init → Repository.at(cwd).init()
+    → create .migit/ structure, HEAD, empty index, config.json, .migitignore
+    → history logged after success
+
+ADD:
+  migit add paths → resolvePathInRepository → Scanner.stage()
+    → writeBlob per file → indexStore.merge()
+    → history logged
+
+COMMIT (manual):
+  migit commit -m "msg" → createSnapshot(tree) → createCommit() → refs.setHead()
+    → author from config.json → index unchanged
+
+COMMIT (smart):
+  migit commit --smart → buildStagedChangeSummary → Gemini prompt
+    → validate/fallback → user confirm → repo.commit()
+
+CHECKOUT:
+  migit checkout branch → findCheckoutBlockers (unless --force)
+    → readBranch → readCommit → readTree → restoreTree → save index → setCurrentBranch
+
+HISTORY:
+  any command → runWithHistory → handler → appendHistory (sanitized args)
+
+DOCTOR:
+  migit doctor → IntegrityChecker.run() → list all issues → exit 1 if any
+
+
+20. ARCHITECTURE LAYERS
+--------------------------------------------------------------------------------
+
+  cli.ts + cli/with-history.ts
+    ↓
+  commands/           (UI — thin wrappers, all history-wrapped)
+    ↓
+  core/                 (VCS engine)
+  history/              (audit log)
+  ai/                   (Gemini integration)
+  document/             (static analysis)
+    ↓
+  utils/ + types/       (shared foundations)
+
+Rules:
+  • commands never import each other
+  • core never imports commands/
+  • object IDs computed ONLY in object-store.ts
+  • API keys NEVER in config.json or history.log
+  • All critical metadata writes use atomicWrite()
+
+
+21. AUTOMATED TESTS
+--------------------------------------------------------------------------------
+
+Run the full suite from the migit/ directory:
+
+  npm install
+  npm test
+
+Stack: Node.js built-in test runner (`node --test`) with `tsx` for TypeScript.
+Each test file uses isolated temp directories under /tmp — no shared state.
+
+Coverage by area:
+
+  Object storage     — blob/tree/commit headers, writeTree, hash/path mismatch
+  Three-way status   — staged added, working modified, untracked, staged deleted
+  Scoped deletions   — add src/ removes only src/ deletions, not lib/
+  Checkout guard     — staged/unstaged/untracked-overwrite blockers
+  Branch switching   — HEAD updates only; other branch refs unchanged
+  Checkout restore   — files restored/removed to match target tree
+  Secret redaction   — env assignments, flags, URL keys, error messages
+  Ignore rules       — .migitignore, always-ignored paths
+  Smart commit       — fallback messages, 72-char normalization
+  Integrity/doctor   — healthy repo, missing index blobs, missing commit trees
+  Path guard         — rejects paths outside repository root
+
+Not yet covered: Gemini API calls (mocked via fallback tests only), document
+generators, full CLI end-to-end via subprocess, concurrent operations.
+
+
+22. CURRENT LIMITATIONS
+--------------------------------------------------------------------------------
+
+  • Not full Git — no merge, rebase, stash, remotes, tags, submodules
+  • No three-way merge or conflict markers
+  • No CLI subprocess tests or Gemini integration tests (unit tests only)
+  • Express/React/Mongoose analyzers use simple regex (not AST parsing)
+  • Single author per commit (no co-authors)
+  • No interactive staging (add -p) or partial hunk staging
+  • Branch names validated but not as strictly as Git's full ref rules
+
+
+23. SUMMARY IN ONE PARAGRAPH
+--------------------------------------------------------------------------------
+
+migit is a Node.js/TypeScript CLI that implements a lightweight Git-like VCS
+using a `.migit/` folder with content-addressed gzip objects, a JSON index,
+branch refs, and a real HEAD file. Repository discovery walks up from any
+subfolder to find `.migit`. Commander.js routes twelve subcommands — all wrapped
+in history logging with secret redaction — through Repository, which coordinates
+staging (with .migitignore), three-way status, atomic metadata writes, safe
+checkout with dirty-tree protection, branch safety rules, and deep integrity
+checks via doctor. Optional Gemini powers smart commits (structured diff metadata,
+fallback messages, user confirmation) and history explain. Configuration stores
+author and AI provider in config.json; API keys live in .env only. `migit document`
+generates markdown from regex-based codebase scanners. A 40-test automated suite
+covers object storage, status, scoped add, checkout, branches, redaction, and
+integrity checks via `npm test`. Install globally with npm link after npm run build
+to use `migit` directly on the PATH.
+
+================================================================================
+  END OF SUMMARY
+================================================================================
