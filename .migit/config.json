@@ -1,0 +1,9 @@
+{
+  "user": {
+    "name": "shaz",
+    "email": "migit@localhost"
+  },
+  "ai": {
+    "provider": "gemini"
+  }
+}

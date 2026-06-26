@@ -5,7 +5,7 @@
 import type { ObjectStore } from './object-store.js';
 import type { StagedEntry } from '../types/index.js';
 
-/** Parse a tree blob (JSON path → object ID map) from the object store. */
+/** Parse a tree object (JSON path → blob hash map) from the object store. */
 export async function parseTreeSnapshot(
   objectStore: ObjectStore,
   treeHash: string,
@@ -31,6 +31,5 @@ export async function createSnapshot(
   for (const entry of index) {
     tree[entry.path] = entry.hash;
   }
-  const content = Buffer.from(JSON.stringify(tree));
-  return objectStore.writeBlob(content);
+  return objectStore.writeTree(tree);
 }

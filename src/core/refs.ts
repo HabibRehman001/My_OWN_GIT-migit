@@ -118,4 +118,14 @@ export class Refs {
     validateBranchName(name);
     await unlink(getBranchRefPath(this.rootDir, name));
   }
+
+  /** Remove all branch ref files (used when reinitializing a repository). */
+  async clearBranchRefs(): Promise<void> {
+    for (const branch of await this.listBranches()) {
+      const path = getBranchRefPath(this.rootDir, branch);
+      if (existsSync(path)) {
+        await unlink(path);
+      }
+    }
+  }
 }

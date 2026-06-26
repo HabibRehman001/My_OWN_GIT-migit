@@ -1,5 +1,5 @@
 /**
- * object-store.ts — content-addressable storage for blobs and commits.
+ * object-store.ts — content-addressable storage for blobs, trees, and commits.
  */
 
 import { readFile, writeFile, readdir } from '../utils/file-system.js';
@@ -8,7 +8,7 @@ import { getObjectsDir } from '../utils/paths.js';
 import type { CommitData } from '../types/index.js';
 import { createHash } from 'node:crypto';
 
-export type ObjectType = 'blob' | 'commit';
+export type ObjectType = 'blob' | 'tree' | 'commit';
 
 export interface ParsedObject {
   type: ObjectType;
@@ -54,7 +54,7 @@ export function parseObject(uncompressed: Buffer): ParsedObject | { error: strin
   }
 
   const header = uncompressed.subarray(0, nullIndex).toString('utf8');
-  const match = header.match(/^(blob|commit) (\d+)$/);
+  const match = header.match(/^(blob|tree|commit) (\d+)$/);
   if (!match) {
     return { error: `invalid object header "${header}"` };
   }
@@ -100,15 +100,24 @@ export class ObjectStore {
     return parsed.payload;
   }
 
-  async writeCommit(data: CommitData): Promise<string> {
-    const body = Buffer.from(JSON.stringify(data));
-    return this.writeObject('commit', body);
+  async writeTree(entries: Record<string, string> | Map<string, string>): Promise<string> {
+    const tree = entries instanceof Map ? Object.fromEntries(entries) : entries;
+    const payload = Buffer.from(JSON.stringify(tree));
+    return this.writeObject('tree', payload);
   }
 
   async readTree(treeHash: string): Promise<Map<string, string>> {
-    const raw = await this.readBlob(treeHash);
-    const tree = JSON.parse(raw.toString('utf-8')) as Record<string, string>;
+    const parsed = await this.readParsedObject(treeHash);
+    if (parsed.type !== 'tree') {
+      throw new Error(`Object ${treeHash} is not a tree`);
+    }
+    const tree = JSON.parse(parsed.payload.toString('utf-8')) as Record<string, string>;
     return new Map(Object.entries(tree));
+  }
+
+  async writeCommit(data: CommitData): Promise<string> {
+    const body = Buffer.from(JSON.stringify(data));
+    return this.writeObject('commit', body);
   }
 
   async readCommit(hash: string): Promise<CommitData & { parent?: string }> {

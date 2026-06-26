@@ -210,8 +210,8 @@ export class IntegrityChecker {
       return issues;
     }
 
-    if (treeObject.type !== 'blob') {
-      issues.push(`Tree ${treeHash} referenced by commit ${commitHash} is not stored as a blob`);
+    if (treeObject.type !== 'tree') {
+      issues.push(`Tree ${treeHash} referenced by commit ${commitHash} is not stored as a tree object`);
       return issues;
     }
 

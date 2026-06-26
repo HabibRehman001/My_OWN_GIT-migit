@@ -3,6 +3,7 @@
  */
 
 import type { Repository } from '../core/repository.js';
+import { listCommitFiles } from '../core/commit-files.js';
 import { loadHeadSnapshot } from '../core/snapshot.js';
 import {
   buildChangeSummary,
@@ -31,12 +32,8 @@ export async function buildStagedChangeSummary(repo: Repository): Promise<Change
     await repo.refs.getHead(),
   );
 
-  const stagedPaths = new Set<string>();
-  for (const path of new Set([...indexMap.keys(), ...headMap.keys()])) {
-    if (indexMap.get(path) !== headMap.get(path)) {
-      stagedPaths.add(path);
-    }
-  }
+  const stagedChanges = await listCommitFiles(repo);
+  const stagedPaths = new Set(stagedChanges.map((change) => change.path));
 
   const files: FileChangeSummary[] = [];
 

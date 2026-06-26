@@ -65,18 +65,38 @@ export class Repository {
 
   /**
    * init — creates a fresh migit repository in rootDir.
-   * What: Sets up `.migit/` folder structure like `git init`.
-   * How: Creates dirs for metadata, objects, branch refs; saves empty index.
+   * Re-running on a repo with commit history requires force: true.
    */
-  async init(options?: { userName?: string; userEmail?: string }): Promise<void> {
+  async init(options?: {
+    userName?: string;
+    userEmail?: string;
+    force?: boolean;
+  }): Promise<'created' | 'reinitialized'> {
     const migitDir = getMiGitDir(this.rootDir);
+    const alreadyExists = existsSync(migitDir);
+    const hadHistory = alreadyExists ? (await this.refs.getHead()) !== null : false;
+
+    if (alreadyExists && hadHistory && !options?.force) {
+      throw new MiGitError(
+        'A migit repository already exists with commit history. ' +
+          'Use "migit init --force" to reinitialize and clear history.',
+      );
+    }
+
     await ensureDir(migitDir);
     await ensureDir(`${migitDir}/objects`);
     await ensureDir(`${migitDir}/refs/heads`);
+
+    if (alreadyExists) {
+      await this.refs.clearBranchRefs();
+    }
+
     await this.refs.initHead('main');
     await this.indexStore.save([]);
     await this.configStore.save(createDefaultConfig(options));
     await ensureDefaultMigitignore(this.rootDir);
+
+    return alreadyExists ? 'reinitialized' : 'created';
   }
 
   /**

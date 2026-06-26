@@ -1,0 +1,432 @@
+[
+  {
+    "path": ".gitignore",
+    "hash": "b8412a6386038a7f5e93509ca98f6fdde3f6fe51a1f97974bf44c106c7ec7823",
+    "mode": "100644"
+  },
+  {
+    "path": ".migitignore",
+    "hash": "389f015427c9f1be5feaf842146d56660b655885a2ce19ae6c9a56a61c62a85c",
+    "mode": "100644"
+  },
+  {
+    "path": ".npmignore",
+    "hash": "2cf87120323446b3bb736d3f62afcfd3f326b5ac494db6be9dc9657d695c62d8",
+    "mode": "100644"
+  },
+  {
+    "path": "app.ts",
+    "hash": "d968e9cbe48a4f18cabb2f544d73b1669642d3e8e82bf82a4113ad650a8a5b9b",
+    "mode": "100644"
+  },
+  {
+    "path": "other.txt",
+    "hash": "14f5162e2fe3d240d0d37aaab0f90e4af9a7cfa79639f3bab005b5bfb4174d9f",
+    "mode": "100644"
+  },
+  {
+    "path": "package-lock.json",
+    "hash": "95c09e73c1865ffe340c55f40ec3e713899fe1e758dd7440a2ccb9d410933713",
+    "mode": "100644"
+  },
+  {
+    "path": "package.json",
+    "hash": "b44564644025f2392b4832788b6eff5a76ee326390eea8bd507064658f942eba",
+    "mode": "100644"
+  },
+  {
+    "path": "README.md",
+    "hash": "86fcaa4c08bc6fd458e1d6bdafdb9e0d2bd424ccb323931775e50bb29917847b",
+    "mode": "100644"
+  },
+  {
+    "path": "readme.txt",
+    "hash": "2cf8d83d9ee29543b34a87727421fdecb7e3f3a183d337639025de576db9ebb4",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/change-summary.ts",
+    "hash": "be9ed8bb3b79b5d5887752dc6e28b13b5dc92ce4f3af9da9e26797a018e562e0",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/commit-fallback.ts",
+    "hash": "4addc13e536ee34b0927696cc0542e576df7d98f8e9d5235ca5348560a1902b3",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/commit-message.ts",
+    "hash": "f1bf14590b6cea2bd9aa4d8a1f18f82bbe5038a69066468cdcbddb578f50f511",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/diff-redactor.ts",
+    "hash": "af2afefed9d08464ae6b861497d01cbe8ab2725c55a559de97de4626aa861f98",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/gemini-client.ts",
+    "hash": "5f9be1c86c22ff3663c6452b1c64ed357ce5101c6b8b1c3f5fcbbc743592495f",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/smart-commit.ts",
+    "hash": "fc36d8b653bce0b95a00b1a92fb38029ebea20d1be29f4de1bbf3ad8479d28df",
+    "mode": "100644"
+  },
+  {
+    "path": "src/ai/staged-changes.ts",
+    "hash": "a368b1a4aa246d49eafd643a7b6214676e63fb1cbb293d731defe36b55152601",
+    "mode": "100644"
+  },
+  {
+    "path": "src/cli.ts",
+    "hash": "ccfeb842114da3ee3d40077033ae5c3737f1556a562ea1dc5ea8c5b98b8cd4a3",
+    "mode": "100644"
+  },
+  {
+    "path": "src/cli/with-history.ts",
+    "hash": "a87ee54a51f6dfd051ebc286ef28e480952a2b449a9047e77abc17d7ad3a4476",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/add.command.ts",
+    "hash": "b1d3eb31b36878727b27814d2b7615a2b0a830550d9eff3998dcd5b5d770484c",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/branch.command.ts",
+    "hash": "07a594a37769665b56dcd99fdb8d167439de0ef49441689740324324d650a4f1",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/checkout.command.ts",
+    "hash": "28003ccc3a390675e5ba1f273e4edfcab71366d1028120e45e8aa1f0abcc36b4",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/commit.command.ts",
+    "hash": "79760b789e67222cb40514e4364df573db0a198f268edb70ce1e7dce0015d856",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/config.command.ts",
+    "hash": "c946b2923bbc66a13911b4f6643aeafa1bc4908d9ac44c0e44e6cc7ec716939d",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/doctor.command.ts",
+    "hash": "ebd1b174a3d89c2af130d521d4292de355fab86e11df8219ccd82f49cb2976b6",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/document.command.ts",
+    "hash": "81a83113ebc1eaa5278e8ca900f1e1110c048a2e51ef265498c9035fe3d2c97c",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/history.command.ts",
+    "hash": "bebec2e5b9a02530d030b79b6c6ee5da660e70243cdbabffcac75b1895deb13b",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/init.command.ts",
+    "hash": "37728c47f7d673397ffbffd9d0633f4474cd9f2ed6cc04d5061aa660fc31919e",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/log.command.ts",
+    "hash": "fcf41697caee142651b5a8519a014540956d7b4daf5f9f2ee35f9e3f7e6777b6",
+    "mode": "100644"
+  },
+  {
+    "path": "src/commands/status.command.ts",
+    "hash": "3043f102db75764a5bac279040737272a6f45c4da4835031b8b6dc517b42a647",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/checkout-engine.ts",
+    "hash": "d745e0645350f57d77e2b24bc67206f26dc6e758ee3394a5cae20de8c95cf534",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/checkout-guard.ts",
+    "hash": "e62a7a92648e4f4dd94d226fc4e1932996b80231e9376842892b35757e6c4fc3",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/commit-files.ts",
+    "hash": "4874f4c70a4995f75e8e9440bb1803a373707ace81ec3e6e306c2322a8a57032",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/commit.ts",
+    "hash": "bdff56e38d16449fb08a786887dd1bee7a93916b723d861f4ca77bb868aaf0f5",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/config-store.ts",
+    "hash": "56443b9d0e92d3489cc430a62c805ab89a4c76342fd3c0a4119e38f74eb26e3e",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/index-store.ts",
+    "hash": "0453fcdcde46a98c83948b2389aaee07a256710088543273b7417d6b8aa0820c",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/integrity-checker.ts",
+    "hash": "e22d693ecbbe012af8f2c5f6f5d2b9a76c2da5b2243d9455eb8d28e57763776f",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/object-store.ts",
+    "hash": "8eaabd8df3d4ce63798995db0b705619feeb27ccbac56bc76f121ab7b5bc5bc4",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/refs.ts",
+    "hash": "432ec42bcd355ad7067ed9fca0f96acf154e1b2f114deb7a799283ba4c12f098",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/repository.ts",
+    "hash": "e82e915b78a6dc32ba58381d3cb0917715b75eefa1bbe37437caedcb59bd9e94",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/scanner.ts",
+    "hash": "911d29dd9c18c9c8ac7f19cccc7eda509ef5e65a58fff5e6d1456260a6121a60",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/snapshot.ts",
+    "hash": "0914de9886e9e5ceac49ce3c1dfd1d2d9733aafafc40d879163422f590f8523f",
+    "mode": "100644"
+  },
+  {
+    "path": "src/core/status-engine.ts",
+    "hash": "3633156255037f83b838f6906b718f17d503f4738f50ea864b8413c1736b6664",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/documentation-generator.ts",
+    "hash": "280ee5946561d8910071b25cd2a7e4d2e3f5867b2c878c8033952ed63e676812",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/express-analyzer.ts",
+    "hash": "6f871fd6231c66dca9502f2cada4a3539197fa04476efa4df8512449584a4b9f",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/mongoose-analyzer.ts",
+    "hash": "931b43b8a027ff72a16f7e380d5568dd9527c2a1d2318e414cd8d05bb9fc6118",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/package-analyzer.ts",
+    "hash": "ad8d0a036c33eaff651f640153c45f37336fe6c71b0dd6eebed3d2d943aa7a6c",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/project-scanner.ts",
+    "hash": "74c48f9ea658e71c19be4d21452daed307ed43cf2c72b70205ec39004854acf8",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/react-analyzer.ts",
+    "hash": "13cee54778f5d962c26895daee1281f69205ae95d4cbd05cd4ce2a0f7bab5a43",
+    "mode": "100644"
+  },
+  {
+    "path": "src/document/stack-detector.ts",
+    "hash": "c2cfb96529e10eaaf94a7089ad46c7057b6ce096ef7ebe9917eff0adc69aaa2c",
+    "mode": "100644"
+  },
+  {
+    "path": "src/history/history-format.ts",
+    "hash": "f7472aeb680aaebe3baaff458dc0e05812f377c0d1ac8a203faeb3fb21545253",
+    "mode": "100644"
+  },
+  {
+    "path": "src/history/history-logger.ts",
+    "hash": "1d741b679fcf826392ee703680e979aab7acb86d6ee904630a6945eef4636b1f",
+    "mode": "100644"
+  },
+  {
+    "path": "src/history/history-reader.ts",
+    "hash": "7af741d1d431fe5f3939d9cd1a267e2d06085b70e2daa434ea09dff8b835b159",
+    "mode": "100644"
+  },
+  {
+    "path": "src/history/history-sanitize.ts",
+    "hash": "29214e9ef1e4e4228b1fcb638ee4869c1179d5b093a5f73765c94c883c551fd4",
+    "mode": "100644"
+  },
+  {
+    "path": "src/history/run-with-history.ts",
+    "hash": "54b2ace629c933806cf5629f52524ca2b8798372e8a460535080214fd0aedf5b",
+    "mode": "100644"
+  },
+  {
+    "path": "src/types/index.ts",
+    "hash": "b72860c180274589a4e5c449b656af15606e0c670f91dd447efa45df47754468",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/add-scope.ts",
+    "hash": "e1d037239b239e528e0aebb27b19a28cc429c1b86837bae3f07f68f93dc85726",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/atomic-write.ts",
+    "hash": "08834d2c7f79b397082338dc5ae8929ee6d4c4944654558b6baa17bc4742eeee",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/branch-name.ts",
+    "hash": "57e6471b26ba6493451553fc800db91812434747e7db62e2f17be99a3f88215e",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/compression.ts",
+    "hash": "5de7e8b1eb226e41e7e568289ae5c31aa42cf1afcc6c68c5f16a6887b7128950",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/errors.ts",
+    "hash": "0edda7c932f572e75c11c77951a9ae9a67aa6e960dc172b95650294496677c92",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/file-system.ts",
+    "hash": "c94c83226bfbed3433d76337785e1d1188ffe6207a4315672512be691420c676",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/ignore-rules.ts",
+    "hash": "c66b20461a2d0287f9e6ca33dbc454fb7d49f0ff4d6444f5558b6bf950098721",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/ignore.ts",
+    "hash": "c9d4955314d9c58828327a37066dbb9144a1887791a47f35436e8473535d2a93",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/load-env.ts",
+    "hash": "22bebd77625a5dc27b0600ca8bd828a57bc8f769a5abae27f2bacc87f406f9d5",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/path-guard.ts",
+    "hash": "35a81017e7f6e3bf906ed261a0b603853e8a9d5eecb8437b635566ef288a356d",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/paths.ts",
+    "hash": "3961e52fa7c9db1b625e852c991a86d37b6affbc3c147f4b90cd0e1427fee424",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/prompt-confirm.ts",
+    "hash": "f6c5ecfeec139dbfa3a7a4592825c6a23095e31646b13206ff6d7cee9ced6a43",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/redact-secrets.ts",
+    "hash": "3337a87666f98d01db07514552f1623b12171ab7eae0e7b6ec38058200cda226",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/sensitive-files.ts",
+    "hash": "bb53e4af1bfd8f35445e7d9a049fbdede7b91cd60d9664a509845ab72195a4f6",
+    "mode": "100644"
+  },
+  {
+    "path": "src/utils/walk-options.ts",
+    "hash": "8d7ea08cb6962880ca1878c9b799e47b694a08ca6189dc9a786300bfff1c1aee",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/.gitkeep",
+    "hash": "473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/add-scope.test.ts",
+    "hash": "da3f9e8e05509368d1a72d858422850f98e9b38765f6e4e0305e9cd9bd4d7b6d",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/branch-safety.test.ts",
+    "hash": "ee21b640f74280468d80594cc9894ecbc1507f4ebbe4873a64435544856f61f1",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/checkout-guard.test.ts",
+    "hash": "1b97b910ec057130b9fa32e4c0b62f3ffbfb9c952918bff18e344372f3fffe19",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/commit-files.test.ts",
+    "hash": "a32ecf4a0610019874722f03f6abc94a0d2e6d3fc8607d0e95ea8f4faa0e04dc",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/document-output.test.ts",
+    "hash": "d26ad013970d69a95b67dfc6353439bfaee46d8b34dc7eb9b0dc91879b57fa9c",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/helpers/temp-repo.ts",
+    "hash": "4dfb2c5d8c196c2b534b1b23f285ab955104919f906a0914ba708038bf7f5cf3",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/history-sanitize.test.ts",
+    "hash": "99d737db27640ded5925cd83f30d7b16e7ed435ada49d863631f53672bb8d079",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/ignore-rules.test.ts",
+    "hash": "ce128b201b291a0c839523da3841597b95ea78432b0b43bf9e6dc6fe9112966e",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/init.test.ts",
+    "hash": "e1ed0a4af0152ded3f3787021f895b3f320b5663ec41a427e14be22b2c13e11f",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/integration.test.ts",
+    "hash": "24f5b43fc38354b9da414408b7b96aff0ee84b38112c87bb0f6ec4cb8e2b96ff",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/integrity.test.ts",
+    "hash": "a5973ab774b95233818e2d7de60750b756656afcdf6cf054d67b655b591c0755",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/object-store.test.ts",
+    "hash": "d960ae33bf4fc67a5d17f9c4e54a0e8ace420167cc407fd922409647ebacbf0e",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/smart-commit.test.ts",
+    "hash": "0a0fbf1d919a628a8b06e23f721ffb38822f8f0e9ce19789ce426b08239b73da",
+    "mode": "100644"
+  },
+  {
+    "path": "tests/status-engine.test.ts",
+    "hash": "0689b20da9d4a4144efc68d56a21cd01a07cf3be70d80119d60b1b860b095e3b",
+    "mode": "100644"
+  },
+  {
+    "path": "tsconfig.json",
+    "hash": "88576216e5c509a2d6b7c10a5e548db68e7a2e0467dee4e47621343227a7d539",
+    "mode": "100644"
+  }
+]

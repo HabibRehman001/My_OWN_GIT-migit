@@ -4,6 +4,7 @@
 
 import type { Command } from 'commander';
 import { Repository } from '../core/repository.js';
+import { formatCommitFileChange, listCommitFiles } from '../core/commit-files.js';
 import { generateSmartCommitMessage } from '../ai/smart-commit.js';
 import { withHistoryAction } from '../cli/with-history.js';
 import { confirmCommitMessage } from '../utils/prompt-confirm.js';
@@ -52,8 +53,19 @@ export function registerCommitCommand(program: Command): void {
             throw new Error('Provide -m "message" or use --smart');
           }
 
+          const committedFiles = await listCommitFiles(repo);
+          if (committedFiles.length === 0) {
+            throw new MiGitError(
+              'Nothing to commit — staged files match the last commit. ' +
+                'Change files and run "migit add", or use "migit init --force" to start fresh.',
+            );
+          }
+
           const hash = await repo.commit(message.trim());
           console.log(`[commit ${hash.slice(0, 7)}] ${message.trim()}`);
+          for (const change of committedFiles) {
+            console.log(formatCommitFileChange(change));
+          }
         },
       ),
     );

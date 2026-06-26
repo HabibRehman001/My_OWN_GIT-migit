@@ -14,7 +14,7 @@ A minimal Git-like version control CLI with project documentation generation.
 | `checkout` | Switch branches (`-f` / `--force` to discard local changes) |
 | `branch` | List, create, or delete branches |
 | `history` | Show command history (`history explain`, or `--explain` alias) |
-| `document` | Generate project documentation |
+| `document` | Generate project documentation (`-o` path, `--force` to overwrite) |
 | `doctor` | Diagnose repository health |
 | `config` | Get or set author and AI settings |
 
@@ -90,9 +90,24 @@ Additional behavior:
 ```bash
 npm install
 npm run build
+npm test            # 40 automated tests (Node test runner + tsx)
 npm link          # install `migit` globally on your PATH
 migit --help
 ```
+
+### Test coverage
+
+The test suite exercises the core VCS engine in isolation using temp repos:
+
+| Area | What is verified |
+|------|------------------|
+| Object storage | Blob hashing, malformed objects, hash/path mismatches |
+| Status | Three-way staged/working/untracked/deleted states |
+| Scoped add | `add src/` only removes deletions under `src/` |
+| Checkout | Dirty-tree blocking, file restoration, branch-only files removed |
+| Branches | Name validation, duplicate/delete rules, HEAD vs branch refs |
+| Secrets | History args and error messages redact API keys |
+| Doctor | Missing blobs, broken commit tree references |
 
 During development without linking:
 

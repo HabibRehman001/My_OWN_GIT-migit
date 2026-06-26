@@ -1,0 +1,9 @@
+# Files and directories migit should not track
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+*.log
+uploads/

@@ -14,15 +14,21 @@ export function registerInitCommand(program: Command): void {
     .description('Initialize a new migit repository')
     .option('-n, --name <name>', 'author name for commits')
     .option('-e, --email <email>', 'author email for commits')
+    .option('-f, --force', 'reinitialize an existing repository and clear history')
     .action(
-      withHistoryAction('init', async (options: { name?: string; email?: string }) => {
+      withHistoryAction('init', async (options: { name?: string; email?: string; force?: boolean }) => {
       const repo = Repository.at(process.cwd());
-      await repo.init({
+      const result = await repo.init({
         userName: options.name,
         userEmail: options.email,
+        force: options.force,
       });
       const config = await repo.configStore.load();
-      console.log('Initialized empty migit repository');
+      if (result === 'reinitialized') {
+        console.log('Reinitialized migit repository (history cleared)');
+      } else {
+        console.log('Initialized empty migit repository');
+      }
       console.log(`Author: ${config.user.name} <${config.user.email}>`);
     }),
     );
