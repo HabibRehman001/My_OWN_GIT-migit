@@ -1,0 +1,31 @@
+{
+  "name": "migit",
+  "version": "0.1.0",
+  "description": "A minimal Git-like version control CLI with project documentation",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "migit": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "keywords": ["git", "vcs", "cli", "version-control"],
+  "license": "MIT",
+  "files": [
+    "dist",
+    ".env.example",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0"
+  }
+}

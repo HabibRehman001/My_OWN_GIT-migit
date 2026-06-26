@@ -1,0 +1,11 @@
+node_modules/
+dist/
+
+# Secrets — never commit real keys
+.env
+.env.*
+!.env.example
+
+# Local / build artifacts
+*.log
+.DS_Store
