@@ -2,9 +2,350 @@
   MIGIT — COMPLETE PROJECT SUMMARY
   Location: /home/shaz/Desktop/typescript projects/My_GIT_VERSION/migit/
   Version: 0.1.0
-  Last updated: reflects full codebase including config, history, AI, doctor,
-                checkout guard, branch safety, .migitignore, and security rules
+  Last updated: 2026-06-26
+  Maintenance rule: update this file after EVERY code change — what was added,
+  removed, or changed, and how the new behavior works.
 ================================================================================
+
+
+0. CHANGELOG — FEATURES ADDED / CHANGED (BY DEVELOPMENT PHASE)
+--------------------------------------------------------------------------------
+
+This section tracks cumulative changes. When new code lands, append here and
+update the affected sections below (commands, core modules, tests, limitations).
+
+─── PHASE: Automated test suite ───
+ADDED:
+  • npm test — Node built-in test runner + tsx (tests/**/*.test.ts)
+  • tests/helpers/temp-repo.ts — isolated /tmp repos per test
+  • 33 test files, 111 tests (see section 21)
+HOW IT WORKS:
+  Each test creates its own temp directory, runs migit core APIs, asserts, cleanup.
+  No Jest — zero extra test framework beyond tsx for TypeScript import.
+
+─── PHASE: Tree objects (proper type, not blob-as-tree) ───
+ADDED:
+  • objectStore.writeTree() / readTree() — header: tree <size>\0<json-map>
+  • parseObject() accepts blob | tree | commit
+CHANGED (removed old behavior):
+  • createSnapshot() no longer uses writeBlob() for trees
+  • Doctor expects commit trees to be type tree, not blob
+HOW IT WORKS:
+  Tree JSON maps path → blob hash. Commits point at tree hashes; trees point at blobs.
+
+─── PHASE: Commit output — list files committed ───
+ADDED:
+  • src/core/commit-files.ts — listCommitFiles(), formatCommitFileChange()
+  • migit commit prints each file: new file / modified / deleted
+CHANGED:
+  • Commit blocked if index matches HEAD (nothing to commit)
+HOW IT WORKS:
+  Before commit, compares HEAD tree vs index (same logic as smart-commit staging).
+  Only paths that differ are listed and allowed to commit.
+
+─── PHASE: migit init --force ───
+ADDED:
+  • migit init -f / --force — clear branch refs and reinitialize
+CHANGED (removed misleading behavior):
+  • Re-init on repo WITH history without --force now ERRORS (no silent keep-old-commits)
+HOW IT WORKS:
+  If .migit exists and main (or any branch) has commits → require --force.
+  With --force: clearBranchRefs(), empty index, HEAD → main, fresh config.
+  Message: "Reinitialized migit repository (history cleared)" vs "Initialized empty...".
+
+─── PHASE: migit document --force ───
+ADDED:
+  • migit document -f / --force — overwrite existing output file
+  • prepareDocumentOutput() in document.command.ts
+HOW IT WORKS:
+  Default: if DOCUMENTATION.md (or -o path) exists → MiGitError, no overwrite.
+  --force: skip existence check, atomicWrite as before.
+
+─── PHASE: Multi-parent commits (merge prep — Phase 1) ───
+ADDED:
+  • CommitData.parents: string[] (replaces single parent field for new writes)
+  • CommitData.generation?: number — distance from root (max parent gen + 1)
+  • src/core/commit-normalize.ts — normalizeCommit(), serializeCommit(),
+    getPrimaryParent(), computeGeneration(), validateCommitParents()
+CHANGED (backward compatible):
+  • Old commits on disk still use "parent": "hash" — readCommit() migrates to parents[]
+  • New commits always write parents[] only (never legacy parent field)
+  • integrity-checker walks ALL parents (stack DFS) for merge commit graphs
+  • migit log follows first parent only (getPrimaryParent) for linear history
+NOT YET ADDED (planned — do not implement until requested):
+  • migit merge --preview, --continue, --abort, conflicts, resolve
+  • Three-way merge commits and conflict markers
+  • Offline branch export/import before network remotes
+HOW COMMIT SHAPES WORK NOW:
+
+  Root commit:
+    { "tree": "…", "parents": [], "message": "Initial commit", "generation": 1 }
+
+  Normal commit:
+    { "tree": "…", "parents": ["previous-hash"], "message": "…", "generation": N }
+
+  Merge commit (when merge engine lands):
+    { "tree": "…", "parents": ["main-head", "feature-head"], "message": "Merge …" }
+
+  Legacy read path:
+    normalizeCommit({ parent: "abc" }) → { parents: ["abc"] }
+
+─── PHASE: Multi-parent consumers (Phase 2) ───
+ADDED:
+  • createCommit() / writeCommit() validate parents[] before persisting
+  • objectStore.hasCommit() — checks commit object exists
+  • integrity-checker verifyCommitExists() — every parent hash verified per commit
+  • repository.log() returns parents[]; walks parents[0] only (first-parent chain)
+  • migit log labels merge commits ("Merge: N parents…"); NO --graph flag yet
+CHANGED:
+  • Doctor walks all parents in commit graph (stack DFS), not single parent field
+  • log.command.ts documents first-parent-only behavior
+NOT ADDED (explicitly deferred):
+  • migit log --graph (wait until merge command works)
+
+─── PHASE: Ancestry utilities (merge prep) ───
+ADDED:
+  • src/core/merge/ancestry.ts — isAncestor(), collectAncestors()
+  • src/core/merge/merge-base.ts — findMergeBase()
+  • tests/ancestry.test.ts — linear chains, merge graphs, fork point, unrelated histories
+HOW IT WORKS:
+  isAncestor(store, ancestor, descendant) — BFS from descendant over parents[] with
+  visited set (cycle-safe on malformed graphs). findMergeBase(store, our, their)
+  intersects ancestor sets from both tips and picks the common commit with the
+  highest generation (most recent common ancestor). Throws MiGitError when histories
+  are unrelated.   ObjectStore is passed in — no Repository coupling yet.
+
+─── PHASE: Generation-optimized ancestry ───
+ADDED:
+  • src/core/merge/generation.ts — GenerationResolver, generationFromParents()
+  • src/core/merge/commit-generation-cache.ts — optional `.migit/cache/commit-generations.json`
+  • getCommitGenerationsCachePath() in paths.ts
+CHANGED:
+  • Root commit generation = 1 (was 0); normal/merge = max(parent generations) + 1
+  • isAncestor() — generation pruning before parent walk
+  • findMergeBase() — walks higher-generation commits first; early stop when possible
+  • repository.commit() — resolves parent generations via GenerationResolver
+HOW IT WORKS:
+  Commits with generation on disk are trusted. Legacy commits without generation are
+  computed on demand (never rewriting objects — hashes would change). Optional cache
+  stores derived generations; safe to delete — values are recomputed and may be
+  rewritten. Doctor allows `.migit/cache/commit-generations.json`.
+
+─── PHASE: Fast-forward merge ───
+ADDED:
+  • migit merge <branch> [-f|--force]
+  • src/core/merge/merge-engine.ts — MergeEngine.merge() fast-forward path
+  • src/core/working-tree.ts — restoreTree(), treeToIndex(), countTreeChanges()
+  • tests/merge-fast-forward.test.ts
+HOW IT WORKS:
+  When current branch tip is an ancestor of the merged branch tip (isAncestor), MiGit
+  fast-forwards: validate commit + tree + blobs → restore working tree → save index →
+  update current branch ref LAST (never move ref before files are restored).
+  Output: "Fast-forward merge", short hashes, file change count.
+  Diverged branches error on actual merge (preview + tree merge handle three-way; apply TBD).
+  Dirty working tree blocked (same rules as checkout; --force overrides).
+  Already-merged: when theirHead is ancestor of ourHead, returns immediately with no file scan.
+
+─── PHASE: Merge — already merged detection ───
+ADDED:
+  • isAncestor(theirHead, ourHead) short-circuit before fast-forward / diverged checks
+  • Merge output: "All commits from <source> are already included in <branch>."
+CHANGED:
+  • AlreadyUpToDateResult includes sourceBranch (removed at hash — not needed for output)
+HOW IT WORKS:
+  When main is at D and feature at C on the same line of history (A—B—C—D / feature@C),
+  merge returns already-up-to-date without reading trees, blobs, or working tree status.
+
+─── PHASE: Merge preview (--preview) ───
+ADDED:
+  • migit merge <branch> --preview — read-only merge analysis
+  • src/core/merge/merge-preview.ts — analyzeThreeWayTrees(), computeMergePreview(), formatMergePreview()
+  • src/core/merge/merge-common.ts — shared resolveMergeBranches() for merge + preview
+  • tests/merge-preview.test.ts
+HOW IT WORKS:
+  Separate calculation stage (like git merge-tree): never touches refs, index, or working tree.
+  Uses findMergeBase + hash-first BASE/OURS/THEIRS comparison per path. Reports unchanged,
+  changed-only-on-current, changed-only-on-incoming, changed-on-both, and predicted conflicts
+  (both-modified, modify/delete). Handles fast-forward and already-merged previews too.
+  Output ends with merge type and "No files were changed."
+
+─── PHASE: Tree merge engine ───
+ADDED:
+  • src/core/merge/merge-types.ts — MergePathStatus, MergePathResult, TreeMergeResult, MergeConflict
+  • src/core/merge/tree-merge.ts — mergeTrees(), summarizeTreeMerge(), conflictDescription()
+  • tests/tree-merge.test.ts
+CHANGED:
+  • merge-preview.ts uses mergeTrees() instead of inline analyzeThreeWayTrees()
+HOW IT WORKS:
+  Hash-first BASE/OURS/THEIRS per path. Statuses: unchanged, ours, theirs, same-change,
+  auto-merged (reserved for future text merge), conflict. Conflict types: content, add-add,
+  modify-delete, binary (null byte in blob), file-directory (path prefix clash).
+  mergedFiles map holds resolved paths only; conflicts listed separately.
+
+─── PHASE: Committed-tree hash merge (Phase 9) ───
+ADDED:
+  • loadTree(objectStore, commitHash) — tree map from commit object, not working tree
+  • loadMergeTrees() — parallel load of BASE / OURS / THEIRS committed trees
+  • collectAllPaths() — union of all tracked paths across three trees
+CHANGED:
+  • mergeTrees() hash pass is O(paths); blob bodies read only for dual-change candidates
+HOW IT WORKS:
+  O(number of tracked paths): each path compares short blob hashes from committed trees.
+  Preview and tree merge never scan the working directory.
+
+─── PHASE: Content merge for conflict candidates (Phase 10) ───
+ADDED:
+  • src/core/merge/content-merge.ts — mergeContentCandidate(), mergeThreeWayText()
+  • Blob bodies loaded only when both branches changed the same path (hash mismatch)
+CHANGED:
+  • mergeTrees() async again for dual-change paths only — hash pass first, then readBlob
+  • Text files → line-based three-way merge; overlapping edits → content conflict
+  • Binary blobs (null byte) → binary conflict without line merge
+  • Clean non-overlapping text edits → auto-merged with new result blob hash
+HOW IT WORKS:
+  baseHash=AAA, ourHash=BBB, theirHash=CCC triggers readBlob on all three sides only.
+  add-add / modify-delete / file-directory still resolved at hash layer without blob reads.
+
+─── PHASE: Automatic text-file merging (Phase 11) ───
+ADDED:
+  • mergeTextFile({ base, ours, theirs }) → FileMergeResult { clean, content, conflicts }
+  • LineConflict — 1-based line range with base/our/their line slices
+  • Port/host example: non-overlapping line edits merge cleanly
+CHANGED:
+  • mergeContentCandidate() uses mergeTextFile() instead of mergeThreeWayText()
+HOW IT WORKS:
+  Line-based diff3 via diffReplaceRegions: apply non-overlapping hunks from both branches;
+  overlapping different edits populate conflicts[] and set clean=false. No AST/semantic merge.
+
+─── PHASE: Conflict markers (Phase 12) ───
+ADDED:
+  • formatConflictBlock() — current / base / incoming marker block per LineConflict
+  • buildMarkedMergeContent() — merges non-conflicting lines, inserts markers at conflicts
+  • TextFileMergeInput.currentBranch / incomingBranch (defaults: main, branch)
+  • MergeTreesOptions — branch names forwarded from merge preview into mergeTrees()
+CHANGED:
+  • mergeTextFile() on conflict: content is marked file text, not empty buffer
+  • mergeContentCandidate() returns content buffer for content conflicts (marked file)
+  • mergeTrees() writes marked conflict blobs to mergedFiles and sets resultHash on path
+HOW IT WORKS:
+  When both branches changed the same lines differently, output embeds:
+    <<<<<<< current:<branch>
+    ...ours...
+    ||||||| base
+    ...base...
+    =======
+    ...theirs...
+    >>>>>>> incoming:<branch>
+  Non-conflicting lines before/after each conflict are still auto-merged into the marked file.
+  Binary and add-add / modify-delete conflicts still have no marked blob.
+
+─── PHASE: Repository locking (Phase 19) ───
+ADDED:
+  • src/core/repository-lock.ts — RepositoryLock.acquire()/release() via fs.open("wx")
+  • .migit/locks/repository.lock — JSON { pid, operation, startedAt }
+  • getLocksDir(), getRepositoryLockPath() in paths.ts
+  • assertRepositoryUnlockedAsync() for commit, checkout, branch -d, merge
+CHANGED:
+  • merge-engine — lock around fast-forward; lock held through conflict pause until continue/abort
+  • merge-continue / merge-abort — release lock in finally
+  • integrity-checker allows .migit/locks/repository.lock
+HOW IT WORKS:
+  Exclusive file creation ("wx") prevents two MiGit processes from mutating refs/index at once.
+  Fast-forward releases lock in finally; conflict merges keep lock until --continue or --abort.
+  Merge-state guards run before lock checks so commit during merge shows continue/abort guidance.
+
+─── PHASE: Merge in progress guards (Phase 18) ───
+ADDED:
+  • src/core/merge/merge-guard.ts — formatMergeInProgressGuidance(), operation guards
+  • migit conflicts — list unresolved/resolved conflicts from merge-state.json
+  • src/commands/conflicts.command.ts
+CHANGED:
+  • repository.commit() blocked during merge (exact continue/abort guidance message)
+  • repository.deleteBranch() blocked during merge
+  • CheckoutEngine.checkout() blocked during merge
+  • MergeEngine.merge() uses shared merge guard message for overlapping merges
+HOW IT WORKS:
+  When merge-state.json exists, block checkout, branch -d, commit, and merge another branch.
+  Allow status, conflicts, resolve, add, merge --continue, merge --abort, and doctor.
+  Commit shows the standard merge-in-progress guidance without a "Commit stopped" prefix.
+
+─── PHASE: Abort merge (Phase 17) ───
+ADDED:
+  • migit merge --abort — cancel in-progress merge, restore pre-merge tree
+  • src/core/merge/merge-abort.ts — abortMerge() from immutable ourCommit object
+CHANGED:
+  • merge.command.ts — --abort option; rejects --continue and --abort together
+  • MergeEngine.abort() delegates to abortMerge()
+HOW IT WORKS:
+  Reads ourCommit from merge-state.json, loads its committed tree from the object store,
+  restores working tree + index from that tree (not from conflict files), leaves branch ref
+  at ourCommit, deletes merge-state.json and MERGE_MSG.
+
+─── PHASE: Continue merge (Phase 16) ───
+ADDED:
+  • migit merge --continue — finalize merge after all conflicts are resolved
+  • src/core/merge/merge-continue.ts — continueMerge(), index/parent validation
+  • loadMergeMessage() — reads .migit/MERGE_MSG for merge commit message
+  • requireMergeState() — shared guard for continue/resolve (Merge vs Resolve wording)
+CHANGED:
+  • merge.command.ts — branch optional with --continue; prints merge commit + parents
+  • MergeEngine.continue() delegates to continueMerge()
+HOW IT WORKS:
+  Validates merge in progress, all conflicts resolved, index blob hashes exist, current branch
+  and tip match merge-state ourCommit/currentBranch. Builds tree from index, writes two-parent
+  merge commit (ourCommit, theirCommit), updates branch ref, deletes merge-state.json + MERGE_MSG.
+
+─── PHASE: Explicit conflict resolution (Phase 15) ───
+ADDED:
+  • migit resolve <paths...> — mark edited conflict files as resolved
+  • src/core/merge/conflict-markers.ts — hasConflictMarkers()
+  • src/core/merge/merge-resolve.ts — resolveMergeConflict(), MergeResolveEngine
+  • src/commands/resolve.command.ts
+CHANGED:
+  • migit add does NOT update merge-state resolved flags (resolve is explicit only)
+HOW IT WORKS:
+  During an in-progress merge, resolve checks merge-state.json, verifies the path is
+  conflicted and unresolved, rejects files that still contain <<<<<<< / ||||||| / =======
+  / >>>>>>> markers, writes the working-tree file as a blob, updates the index, and
+  sets resolved:true on that conflict entry. migit add may stage the same file but leaves
+  merge state unchanged until resolve runs.
+
+─── PHASE: Merge state persistence (Phase 13) ───
+ADDED:
+  • src/core/merge/merge-state.ts — load/save/clear merge-state.json and MERGE_MSG
+  • MergeState / MergeStateConflict types (version 1)
+  • formatMergeMessage() — "Merge branch <incoming> into <current>"
+  • assertNoMergeInProgress() — blocks overlapping merges
+  • getMergeStatePath(), getMergeMsgPath() in paths.ts
+CHANGED:
+  • merge-engine.ts — diverged merges run three-way tree merge instead of hard error
+  • On conflicts: apply mergedFiles to working tree + index, write merge state, no commit
+  • On clean three-way: still errors (merge commits not yet supported)
+  • merge.command.ts — prints conflict list and "Merge paused — no commit was created"
+  • integrity-checker allows merge-state.json and MERGE_MSG under .migit/
+HOW IT WORKS:
+  When tree merge finds conflicts, MiGit restores auto-merged + marked files, saves index,
+  writes .migit/merge-state.json (commits, branches, conflict list with resolved:false),
+  and .migit/MERGE_MSG with the default merge commit message. Branch ref and HEAD unchanged.
+
+─── PLANNED ROADMAP (memorized, not coded) ───
+  1. Branches                    ✅ done
+  2. Merge engine                ← in progress (fast-forward ✅; three-way next)
+  3. Conflict management
+  4. Branch policies
+  5. Offline branch export/import
+  6. Remote push/fetch           ← explicitly later (no cloud required now)
+
+  Target merge commands (future):
+    migit merge <branch>           ✅ fast-forward only
+    migit merge [--preview] [--no-commit]   ← three-way / merge commits
+    migit merge --continue                  ✅ two-parent commit after resolve
+    migit merge --abort                     ✅ restore pre-merge tree from ourCommit
+    migit conflicts                         ✅ list merge conflicts
+    migit resolve <files...>                ✅ explicit resolution during merge
+
+  Merge algorithm (future): BASE = merge base, OURS = current branch tip,
+  THEIRS = merged branch tip. Compare blob hashes per path before line diff.
 
 
 1. WHAT IS MIGIT?
@@ -20,6 +361,7 @@ a learning / prototype VCS with these goals:
   • Auto-scan a codebase and produce markdown documentation
   • Command history logging with optional AI explanation
   • Repository health checks (doctor)
+  • Automated test suite (npm test — 73 tests)
 
 Tech stack:
   • Language: TypeScript (ES modules, compiled to dist/)
@@ -36,6 +378,7 @@ Primary usage (after linking):
 
   npm install
   npm run build          # tsc + chmod +x dist/cli.js
+  npm test               # 52 automated tests
   npm link               # installs `migit` on your PATH
   migit init
   migit --help
@@ -124,6 +467,20 @@ Object format on disk:
   Tree payload: JSON object mapping repo-relative paths → blob hashes.
   Commits reference tree hashes; trees reference blob hashes.
 
+Commit JSON payload (inside commit object, after normalization):
+
+  {
+    "tree": "<tree-hash>",
+    "parents": ["<parent-hash>", ...],   // [] = root; 1 = normal; 2 = merge
+    "author": "Name <email>",
+    "timestamp": 1710000000000,
+    "message": "…",
+    "generation": 3                      // optional; written on new commits
+  }
+
+  Legacy commits may still store "parent": "single-hash" on disk; readCommit()
+  upgrades them via normalizeCommit() — old repositories remain usable.
+
 config.json example (safe — no API keys):
 
   {
@@ -148,12 +505,15 @@ history.log entry format (one JSON object per line):
 5. ALL CLI COMMANDS (WHAT THEY DO & HOW)
 --------------------------------------------------------------------------------
 
-5.1  migit init [-n name] [-e email]
+5.1  migit init [-n name] [-e email] [-f|--force]
   • Repository.at(process.cwd()) — never discovers parent repos
   • Creates .migit/, objects/, refs/heads/, HEAD → refs/heads/main
   • Saves empty index [], writes config.json with author defaults
   • Creates .migitignore with default patterns if missing
   • Does NOT create an initial commit
+  • If .migit already exists WITH commit history → error unless --force
+  • --force: clears all branch refs (history), empty index, reinit config
+  • Returns message "Initialized empty…" or "Reinitialized… (history cleared)"
 
 5.2  migit add <paths...>
   • Rejects paths outside repo root (../ escapes blocked)
@@ -172,8 +532,11 @@ history.log entry format (one JSON object per line):
   • Working: modified / deleted / untracked (index ≠ disk)
 
 5.4  migit commit -m "message"
+  • Lists files in this commit (new file / modified / deleted) before writing
+  • Blocks with error if index matches HEAD (nothing to commit)
   • Builds tree object from complete index via objectStore.writeTree()
-  • Creates commit object with author from config.json
+  • Creates commit with parents: [current-branch-tip] or [] for first commit
+  • Sets generation = max(parent generations) + 1 (or 1 for root)
   • Updates current branch ref to new commit hash
   • Index is NOT cleared — stays equal to HEAD after commit
 
@@ -188,7 +551,10 @@ history.log entry format (one JSON object per line):
   • Never sends API keys or .env contents to Gemini
 
 5.6  migit log [-n count]
-  • Walks parent chain from HEAD commit (default 10 commits)
+  • Walks first-parent chain only: commit.parents[0] at each step
+  • Merge commits appear in log; side-parent history is not walked
+  • Merge commits print "Merge: N parents (following first parent in log)"
+  • Does NOT implement --graph (deferred until merge command lands)
   • Prints hash, author, date, message
 
 5.7  migit branch [name] [-d]
@@ -205,25 +571,46 @@ history.log entry format (one JSON object per line):
   • --force skips protection and switches anyway
   • Restores working tree from target commit tree, replaces index, updates HEAD
 
-5.9  migit config [key] [value] [--list]
+5.9  migit merge [branch] [-f|--force] [--preview] [--continue] [--abort]
+  • Merges the named branch into the currently checked-out branch
+  • --preview: show merge base, per-path stats, predicted conflicts; no file changes
+  • --continue: create merge commit after all conflicts resolved via migit resolve
+  • --abort: restore pre-merge tree from ourCommit and clear merge metadata
+  • Fast-forward when current tip is an ancestor of the other branch
+  • Diverged merges with conflicts: apply partial merge, write merge-state.json + MERGE_MSG, pause
+  • Clean diverged merges still error (automatic merge commit without conflicts not supported)
+  • Dirty-tree protection same as checkout; --force skips
+
+5.10 migit conflicts
+  • Lists unresolved and resolved paths from merge-state.json during an in-progress merge
+  • Requires merge in progress
+
+5.11 migit resolve <paths...>
+  • Requires merge in progress (merge-state.json present)
+  • Path must be listed as an unresolved conflict
+  • Rejects files that still contain conflict markers
+  • Writes resolved content as blob, updates index, sets resolved:true in merge state
+  • migit add does NOT mark conflicts resolved — use resolve explicitly
+
+5.12 migit config [key] [value] [--list]
   • Get/set .migit/config.json values
   • Keys: user.name, user.email, ai.provider, ai.model
   • Rejects ai.key / apiKey / token keys — use GEMINI_API_KEY env instead
   • --list prints full config JSON
 
-5.10 migit history [--explain]
+5.12 migit history [--explain]
   • Shows .migit/history.log entries (command, args, status, duration)
   • migit history explain       → plain-text summary of recent commands
   • migit history explain --ai  → Gemini summary
   • migit history --explain     → alias for explain --ai
 
-5.11 migit document [-o path] [--force]
+5.13 migit document [-o path] [--force]
   • Runs analyzers in parallel → DOCUMENTATION.md (or custom path)
   • Refuses to overwrite an existing output file unless --force is passed
   • Respects .migitignore; never includes .env or credential files
   • Output via atomicWrite()
 
-5.12 migit doctor
+5.14 migit doctor
   • Deep integrity checks (see section 9)
   • Exit code 1 if any issues found
 
@@ -424,8 +811,20 @@ snapshot.ts
 commit.ts
   createCommit() — builds commit object via objectStore.writeCommit()
 
+commit-normalize.ts
+  normalizeCommit() — legacy parent → parents[] on read
+  serializeCommit() — canonical write shape (no legacy parent field)
+  getPrimaryParent() — parents[0] for linear log
+  computeGeneration() — max parent generation + 1
+  validateCommitParents() — doctor parent hash validation
+
+commit-files.ts
+  listCommitFiles() — HEAD vs index diff for commit output
+  formatCommitFileChange() — "  new file: path" lines
+
 refs.ts
   HEAD file, branch refs, getHead(), setHead(), setCurrentBranch()
+  clearBranchRefs() — used by init --force
   All writes use atomicWrite; branch names validated
 
 scanner.ts
@@ -436,12 +835,75 @@ status-engine.ts
 
 checkout-engine.ts
   checkout(target, { force }) — guard, restore tree, update index + HEAD
+  Uses working-tree.ts for restoreTree / treeToIndex
+
+working-tree.ts
+  restoreTree() — write blobs to disk, remove paths absent from target tree
+  treeToIndex() — tree map → StagedEntry[]
+  countTreeChanges() — paths whose blob hash differs between two trees
+
+merge/merge-engine.ts
+  MergeEngine.merge(branch) — fast-forward or three-way with conflict pause
+  MergeEngine.preview(branch) — delegates to computeMergePreview()
+  On conflicts: restore merged tree, save index, write merge-state.json + MERGE_MSG (no commit)
+
+repository-lock.ts
+  RepositoryLock.acquire()/release() via wx; assertRepositoryUnlockedAsync()
+
+merge/merge-state.ts
+  loadMergeState(), saveMergeState(), saveMergeMsg(), clearMergeState()
+  formatMergeMessage() — "Merge branch <incoming> into <current>"
+
+merge/conflict-markers.ts
+  hasConflictMarkers() — detect remaining diff3 marker lines
+
+merge/merge-continue.ts
+  continueMerge() — validate state/index, two-parent merge commit, clear merge metadata
+
+merge/merge-guard.ts
+  formatMergeInProgressGuidance(), assertNoMergeDuring* operation guards
+
+merge/merge-abort.ts
+  abortMerge() — restore tree/index from ourCommit, clear merge metadata
+
+merge/merge-resolve.ts
+  resolveMergeConflict(), MergeResolveEngine — explicit conflict resolution
+
+merge/merge-types.ts
+  MergePathStatus, MergePathResult, MergeConflict, TreeMergeResult
+
+merge/content-merge.ts
+  mergeTextFile(), mergeContentCandidate() — diff3 line merge, LineConflict reporting
+
+merge/tree-merge.ts
+  loadTree(), loadMergeTrees(), collectAllPaths(), mergeTrees() — hash-first then content
+
+merge/merge-preview.ts
+  computeMergePreview(), formatMergePreview() — uses mergeTrees()
+
+merge/merge-common.ts
+  resolveMergeBranches() — shared validation for merge and preview
+
+merge/generation.ts
+  GenerationResolver — on-disk / cache / computed generation for legacy commits
+
+merge/commit-generation-cache.ts
+  Optional `.migit/cache/commit-generations.json` (safe to delete)
 
 checkout-guard.ts
   findCheckoutBlockers(), formatCheckoutBlockedMessage()
 
 integrity-checker.ts
   IntegrityChecker.run() — full doctor checks
+  walkCommitChain() — visits all parents via verifyCommitExists() per parent
+  verifyCommitExists() — each parent must exist and be type commit
+
+merge/ancestry.ts
+  isAncestor(store, possibleAncestor, commitHash) — BFS parent walk with visited set
+  collectAncestors(store, startHash) — all reachable commits from a tip
+
+merge/merge-base.ts
+  findMergeBase(store, ourCommit, theirCommit) — best common ancestor (max generation)
 
 config-store.ts
   load/save config.json, resolveAiModel(), validate no secrets on disk
@@ -488,7 +950,8 @@ Output: DOCUMENTATION.md via atomicWrite (default path configurable with -o).
 
   MiGitObject   → { type: blob|tree|commit, content: Buffer }
   TreeEntry     → { mode, name, hash }
-  CommitData    → { tree, parent?, author, timestamp, message }
+  CommitData    → { tree, parents[], author, timestamp, message, generation? }
+                  Legacy on-disk: { parent?: string } migrated on read
   StagedEntry   → { path, hash, mode }
   StatusEntry   → { path, staged, working }
   RefInfo       → { name, hash }
@@ -518,6 +981,9 @@ migit/
     │   ├── commit.command.ts       --smart, --paths-only, -y
     │   ├── log.command.ts
     │   ├── checkout.command.ts     -f/--force
+    │   ├── merge.command.ts        merge + --preview
+    │   ├── resolve.command.ts      explicit conflict resolution
+    │   ├── conflicts.command.ts    list merge conflicts
     │   ├── branch.command.ts
     │   ├── history.command.ts      history explain [--ai]
     │   ├── document.command.ts
@@ -530,12 +996,32 @@ migit/
     │   ├── index-store.ts
     │   ├── snapshot.ts
     │   ├── commit.ts
+    │   ├── commit-normalize.ts   parents[], legacy migration, generation
+    │   ├── commit-files.ts       commit output file listing
     │   ├── refs.ts
     │   ├── scanner.ts
     │   ├── status-engine.ts
     │   ├── checkout-engine.ts
+    │   ├── working-tree.ts         restoreTree, treeToIndex, countTreeChanges
     │   ├── checkout-guard.ts
     │   ├── integrity-checker.ts
+    │   ├── repository-lock.ts      exclusive .migit/locks/repository.lock
+    │   ├── merge/
+    │   │   ├── ancestry.ts
+    │   │   ├── merge-base.ts
+    │   │   ├── generation.ts
+    │   │   ├── commit-generation-cache.ts
+    │   │   ├── merge-types.ts
+    │   │   ├── tree-merge.ts
+    │   │   ├── content-merge.ts
+    │   │   ├── merge-engine.ts
+    │   │   ├── merge-state.ts
+    │   │   ├── merge-guard.ts
+    │   │   ├── conflict-markers.ts
+    │   │   ├── merge-resolve.ts
+    │   │   ├── merge-continue.ts
+    │   │   ├── merge-abort.ts
+    │   │   └── merge-preview.ts
     │   └── config-store.ts
     │
     ├── history/
@@ -583,10 +1069,10 @@ migit/
     └── types/
         └── index.ts
 
-tests/                          Node.js native test runner + tsx (40 tests)
+tests/                          Node.js native test runner + tsx (73 tests)
 ├── helpers/
 │   └── temp-repo.ts            Temp repo fixture (init + cleanup)
-├── object-store.test.ts        Hashing, parseObject, verifyStorage
+├── object-store.test.ts        Blob/tree/commit headers, verifyStorage
 ├── status-engine.test.ts       Three-way status (staged/working/untracked)
 ├── add-scope.test.ts           Scoped deletions (add src/ must not touch lib/)
 ├── checkout-guard.test.ts      Dirty-tree blocker logic
@@ -595,6 +1081,22 @@ tests/                          Node.js native test runner + tsx (40 tests)
 ├── ignore-rules.test.ts        .migitignore parsing and always-ignored paths
 ├── smart-commit.test.ts        Fallback messages and message normalization
 ├── document-output.test.ts     Document overwrite protection (--force)
+├── commit-files.test.ts        listCommitFiles, formatCommitFileChange
+├── commit-normalize.test.ts    Legacy parent migration, merge parents, generation
+├── log-parents.test.ts         log follows parents[0] through merge commits
+├── ancestry.test.ts            isAncestor, findMergeBase, unrelated histories
+├── generation-cache.test.ts    GenerationResolver, optional cache deletion
+├── merge-fast-forward.test.ts  fast-forward merge, clean diverged rejection
+├── merge-conflicts.test.ts     merge state, MERGE_MSG, conflict pause (no commit)
+├── merge-resolve.test.ts       migit resolve, marker checks, add vs resolve
+├── merge-continue.test.ts      merge --continue, two-parent commit, guards
+├── repository-lock.test.ts     wx lock acquire/release, blocked ops
+├── merge-guard.test.ts         blocked ops during merge, allowed status/add
+├── merge-abort.test.ts         merge --abort, restore from ourCommit
+├── merge-preview.test.ts       --preview stats, conflicts, no mutations
+├── content-merge.test.ts       line three-way merge, binary conflict
+├── tree-merge.test.ts          mergeTrees path classification and conflicts
+├── init.test.ts                init --force, re-init with history blocked
 ├── integration.test.ts         Checkout restoration, path guard
 └── integrity.test.ts           Doctor: missing blobs, malformed commit trees
 
@@ -613,7 +1115,10 @@ ADD:
     → history logged
 
 COMMIT (manual):
-  migit commit -m "msg" → createSnapshot(tree) → createCommit() → refs.setHead()
+  migit commit -m "msg"
+    → listCommitFiles() — abort if empty
+    → createSnapshot(tree) → createCommit(parents[], generation)
+    → refs.setHead() → print file list
     → author from config.json → index unchanged
 
 COMMIT (smart):
@@ -667,6 +1172,10 @@ Each test file uses isolated temp directories under /tmp — no shared state.
 Coverage by area:
 
   Object storage     — blob/tree/commit headers, writeTree, hash/path mismatch
+  Commit model       — parents[], legacy parent migration, generation, merge shape
+  Commit output      — listCommitFiles, empty-commit guard
+  Init safety        — init --force, block re-init with history
+  Document safety    — document --force overwrite protection
   Three-way status   — staged added, working modified, untracked, staged deleted
   Scoped deletions   — add src/ removes only src/ deletions, not lib/
   Checkout guard     — staged/unstaged/untracked-overwrite blockers
@@ -675,8 +1184,11 @@ Coverage by area:
   Secret redaction   — env assignments, flags, URL keys, error messages
   Ignore rules       — .migitignore, always-ignored paths
   Smart commit       — fallback messages, 72-char normalization
-  Integrity/doctor   — healthy repo, missing index blobs, missing commit trees
+  Integrity/doctor   — healthy repo, missing index blobs, malformed commit trees
   Path guard         — rejects paths outside repository root
+  Ancestry / merge   — isAncestor, findMergeBase, fast-forward merge, generation cache
+
+Total: 111 tests in 33 suites (npm test).
 
 Not yet covered: Gemini API calls (mocked via fallback tests only), document
 generators, full CLI end-to-end via subprocess, concurrent operations.
@@ -685,32 +1197,43 @@ generators, full CLI end-to-end via subprocess, concurrent operations.
 22. CURRENT LIMITATIONS
 --------------------------------------------------------------------------------
 
-  • Not full Git — no merge, rebase, stash, remotes, tags, submodules
-  • No three-way merge or conflict markers
+  • Not full Git — no rebase, stash, remotes, tags, submodules
+  • migit merge fast-forwards when possible; diverged merges pause on conflicts until resolve + --continue
+  • Clean three-way merges (no conflicts) still error — no automatic merge commit for that case
+  • merge --abort restores from ourCommit objects; never reconstructs from conflict files
+  • migit log shows first-parent history only (merge side branches omitted from log)
+  • No offline branch export/import yet (planned before remotes)
   • No CLI subprocess tests or Gemini integration tests (unit tests only)
   • Express/React/Mongoose analyzers use simple regex (not AST parsing)
   • Single author per commit (no co-authors)
   • No interactive staging (add -p) or partial hunk staging
   • Branch names validated but not as strictly as Git's full ref rules
+  • migit status UX minimal (clean repo prints nothing; no Git-style sections)
 
+23. REMOVED / DEPRECATED BEHAVIORS (do not reintroduce without migration)
+--------------------------------------------------------------------------------
 
-23. SUMMARY IN ONE PARAGRAPH
+  • Storing commit trees as blob objects (must be type tree)
+  • Writing new commits with legacy "parent" field (use parents[] only)
+  • migit init silently keeping old commit history while claiming "empty repo"
+  • migit document overwriting existing output without --force
+  • migit commit with no file list and no empty-commit guard
+
+24. SUMMARY IN ONE PARAGRAPH
 --------------------------------------------------------------------------------
 
 migit is a Node.js/TypeScript CLI that implements a lightweight Git-like VCS
-using a `.migit/` folder with content-addressed gzip objects, a JSON index,
-branch refs, and a real HEAD file. Repository discovery walks up from any
-subfolder to find `.migit`. Commander.js routes twelve subcommands — all wrapped
-in history logging with secret redaction — through Repository, which coordinates
-staging (with .migitignore), three-way status, atomic metadata writes, safe
-checkout with dirty-tree protection, branch safety rules, and deep integrity
-checks via doctor. Optional Gemini powers smart commits (structured diff metadata,
-fallback messages, user confirmation) and history explain. Configuration stores
-author and AI provider in config.json; API keys live in .env only. `migit document`
-generates markdown from regex-based codebase scanners. A 40-test automated suite
-covers object storage, status, scoped add, checkout, branches, redaction, and
-integrity checks via `npm test`. Install globally with npm link after npm run build
-to use `migit` directly on the PATH.
+using a `.migit/` folder with content-addressed gzip objects (blob, tree, commit),
+a JSON index, branch refs, and a real HEAD file. Repository discovery walks up
+from any subfolder to find `.migit`. Commander.js routes twelve subcommands — all
+wrapped in history logging with secret redaction — through Repository, which
+coordinates staging (with .migitignore), three-way status, atomic metadata writes,
+safe checkout with dirty-tree protection, branch safety rules, init --force,
+commit file listing, document --force, multi-parent commit objects (merge-ready),
+and deep integrity checks via doctor. Commits use parents[] with legacy parent
+migration on read; generation tracks depth from root. Optional Gemini powers smart
+commits and history explain. A 52-test suite runs via npm test. Merge/conflict/
+offline-export/remotes are planned (section 0) but not implemented yet.
 
 ================================================================================
   END OF SUMMARY

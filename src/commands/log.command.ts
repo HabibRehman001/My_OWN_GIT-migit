@@ -1,7 +1,6 @@
 /**
  * log.command.ts — registers the `migit log` subcommand.
- * What: Prints commit history starting from HEAD, walking parent chain.
- * How: Repository.log() traverses commits; this command formats and prints them.
+ * Walks first parent only (commit.parents[0]). No --graph until merge is implemented.
  */
 
 import type { Command } from 'commander';
@@ -25,6 +24,9 @@ export function registerLogCommand(program: Command): void {
 
       for (const commit of commits) {
         console.log(`commit ${commit.hash}`);
+        if (commit.parents.length > 1) {
+          console.log(`Merge: ${commit.parents.length} parents (following first parent in log)`);
+        }
         console.log(`Author: ${commit.author}`);
         console.log(`Date:   ${new Date(commit.timestamp).toISOString()}`);
         console.log();

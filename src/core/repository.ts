@@ -12,12 +12,16 @@ import { Scanner } from './scanner.js';
 import { ConfigStore, createDefaultConfig } from './config-store.js';
 import { IntegrityChecker } from './integrity-checker.js';
 import { createCommit } from './commit.js';
+import { getPrimaryParent } from './commit-normalize.js';
+import { GenerationResolver, generationFromParents } from './merge/generation.js';
 import { createSnapshot } from './snapshot.js';
 import { getMiGitDir, findRepositoryRoot } from '../utils/paths.js';
 import { findScopedDeletions } from '../utils/add-scope.js';
 import { validateBranchName } from '../utils/branch-name.js';
 import { ensureDir, existsSync } from '../utils/file-system.js';
 import { MiGitError } from '../utils/errors.js';
+import { assertNoMergeDuringBranchDelete, assertNoMergeDuringCommit } from './merge/merge-guard.js';
+import { assertRepositoryUnlockedAsync } from './repository-lock.js';
 import { ensureDefaultMigitignore } from '../utils/ignore-rules.js';
 
 /**
@@ -134,31 +138,42 @@ export class Repository {
    */
   async commit(message: string): Promise<string> {
     this.assertInitialized();
+    assertNoMergeDuringCommit(this.rootDir);
+    await assertRepositoryUnlockedAsync(this.rootDir);
     const index = await this.indexStore.load();
     const tree = await createSnapshot(this.objectStore, index);
     const parent = await this.refs.getHead();
+    const parents = parent ? [parent] : [];
     const author = await this.configStore.getAuthor();
+    const generationResolver = new GenerationResolver(this.objectStore, this.rootDir);
+    await generationResolver.init();
+    const parentGenerations = await Promise.all(
+      parents.map((hash) => generationResolver.getGeneration(hash)),
+    );
+    const generation = generationFromParents(parentGenerations);
     const hash = await createCommit(this.objectStore, {
       tree,
-      parent: parent ?? undefined,
+      parents,
       author,
       timestamp: Date.now(),
       message,
+      generation,
     });
+    await generationResolver.flush();
     await this.refs.setHead(hash);
     return hash;
   }
 
   /**
-   * log — walks the commit parent chain from HEAD, up to maxCount commits.
-   * What: Returns commit history newest-first for display.
-   * How: While loop follows parent pointers until limit or chain ends.
+   * log — walks the first-parent chain from HEAD (parents[0]), up to maxCount commits.
+   * Merge commits are included; side-parent history is not walked until log --graph exists.
    */
   async log(maxCount: number): Promise<Array<{
     hash: string;
     author: string;
     timestamp: number;
     message: string;
+    parents: string[];
   }>> {
     this.assertInitialized();
     const commits: Array<{
@@ -166,14 +181,20 @@ export class Repository {
       author: string;
       timestamp: number;
       message: string;
+      parents: string[];
     }> = [];
     let current = await this.refs.getHead();
 
-    // Walk parent chain: read each commit, push to array, follow parent hash.
     while (current && commits.length < maxCount) {
       const commit = await this.objectStore.readCommit(current);
-      commits.push({ hash: current, ...commit });
-      current = commit.parent ?? null;
+      commits.push({
+        hash: current,
+        author: commit.author,
+        timestamp: commit.timestamp,
+        message: commit.message,
+        parents: [...commit.parents],
+      });
+      current = getPrimaryParent(commit);
     }
 
     return commits;
@@ -210,6 +231,8 @@ export class Repository {
   /** deleteBranch — removes a branch ref file from refs/heads/. */
   async deleteBranch(name: string): Promise<void> {
     this.assertInitialized();
+    assertNoMergeDuringBranchDelete(this.rootDir);
+    await assertRepositoryUnlockedAsync(this.rootDir);
     validateBranchName(name);
 
     const branches = await this.listBranches();

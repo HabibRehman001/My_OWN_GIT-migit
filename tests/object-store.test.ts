@@ -115,6 +115,7 @@ describe('object-store', () => {
       const treeHash = await store.writeTree({ 'a.txt': blobHash });
       const commitHash = await store.writeCommit({
         tree: treeHash,
+        parents: [],
         author: 'test <test@example.com>',
         timestamp: Date.now(),
         message: 'test',
@@ -122,6 +123,7 @@ describe('object-store', () => {
       const commit = await store.readCommit(commitHash);
       assert.equal(commit.tree, treeHash);
       assert.equal(commit.message, 'test');
+      assert.deepEqual(commit.parents, []);
 
       const verification = await store.verifyStorage();
       const treeRecord = verification.objects.get(treeHash);

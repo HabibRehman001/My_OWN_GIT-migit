@@ -22,16 +22,18 @@ export interface TreeEntry {
 
 /**
  * CommitData — metadata stored inside a commit object.
- * What: Links a tree snapshot to its parent, author, time, and message.
+ * What: Links a tree snapshot to zero or more parents, author, time, and message.
  * How: Serialized as JSON inside the commit object in the object store.
- * The optional `parent` creates a linked list of commits (history chain).
+ * `parents` is empty for the root commit, one entry for normal commits, two for merges.
  */
 export interface CommitData {
   tree: string;
-  parent?: string;
+  parents: string[];
   author: string;
   timestamp: number;
   message: string;
+  /** Distance from root (1-based); max(parent generations) + 1 when written. */
+  generation?: number;
 }
 
 /**

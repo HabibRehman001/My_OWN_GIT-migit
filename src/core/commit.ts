@@ -6,15 +6,21 @@
 
 import type { ObjectStore } from './object-store.js';
 import type { CommitData } from '../types/index.js';
+import { validateCommitParents } from './commit-normalize.js';
 
 /**
  * createCommit — writes commit metadata to the object store.
- * What: Produces a new commit object linked to a tree and optional parent.
- * How: Delegates entirely to objectStore.writeCommit(data).
+ * What: Produces a new commit object linked to a tree and zero or more parents.
+ * How: Validates parents[] then delegates to objectStore.writeCommit(data).
  */
 export async function createCommit(
   objectStore: ObjectStore,
   data: CommitData,
 ): Promise<string> {
+  const parentIssues = validateCommitParents(data);
+  if (parentIssues.length > 0) {
+    throw new Error(`Invalid commit parents: ${parentIssues.join('; ')}`);
+  }
+
   return objectStore.writeCommit(data);
 }

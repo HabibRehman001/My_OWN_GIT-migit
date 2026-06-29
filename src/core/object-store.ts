@@ -6,6 +6,12 @@ import { readFile, writeFile, readdir } from '../utils/file-system.js';
 import { compress, decompress } from '../utils/compression.js';
 import { getObjectsDir } from '../utils/paths.js';
 import type { CommitData } from '../types/index.js';
+import {
+  normalizeCommit,
+  serializeCommit,
+  validateCommitParents,
+  type StoredCommitPayload,
+} from './commit-normalize.js';
 import { createHash } from 'node:crypto';
 
 export type ObjectType = 'blob' | 'tree' | 'commit';
@@ -116,16 +122,31 @@ export class ObjectStore {
   }
 
   async writeCommit(data: CommitData): Promise<string> {
-    const body = Buffer.from(JSON.stringify(data));
+    const parentIssues = validateCommitParents(data);
+    if (parentIssues.length > 0) {
+      throw new Error(`Invalid commit parents: ${parentIssues.join('; ')}`);
+    }
+    const body = Buffer.from(JSON.stringify(serializeCommit(data)));
     return this.writeObject('commit', body);
   }
 
-  async readCommit(hash: string): Promise<CommitData & { parent?: string }> {
+  async readCommit(hash: string): Promise<CommitData> {
     const parsed = await this.readParsedObject(hash);
     if (parsed.type !== 'commit') {
       throw new Error(`Object ${hash} is not a commit`);
     }
-    return JSON.parse(parsed.payload.toString('utf-8')) as CommitData;
+    const raw = JSON.parse(parsed.payload.toString('utf-8')) as StoredCommitPayload;
+    return normalizeCommit(raw);
+  }
+
+  /** True when hash resolves to a stored commit object. */
+  async hasCommit(hash: string): Promise<boolean> {
+    try {
+      await this.readCommit(hash);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async writeObject(type: string, payload: Buffer): Promise<string> {

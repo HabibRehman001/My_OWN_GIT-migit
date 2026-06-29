@@ -8,10 +8,10 @@ import {
   findCheckoutBlockers,
   formatCheckoutBlockedMessage,
 } from './checkout-guard.js';
-import type { StagedEntry } from '../types/index.js';
 import { MiGitError } from '../utils/errors.js';
-import { writeFile, unlink } from '../utils/file-system.js';
-import { join } from 'node:path';
+import { restoreTree, treeToIndex } from './working-tree.js';
+import { assertNoMergeDuringCheckout } from './merge/merge-guard.js';
+import { assertRepositoryUnlockedAsync } from './repository-lock.js';
 
 export interface CheckoutOptions {
   force?: boolean;
@@ -22,6 +22,8 @@ export class CheckoutEngine {
 
   async checkout(target: string, options: CheckoutOptions = {}): Promise<void> {
     this.repo.assertInitialized();
+    assertNoMergeDuringCheckout(this.repo.rootDir);
+    await assertRepositoryUnlockedAsync(this.repo.rootDir);
 
     const branches = await this.repo.listBranches();
     if (!branches.includes(target)) {
@@ -44,36 +46,10 @@ export class CheckoutEngine {
       }
     }
 
-    await this.restoreTree(tree);
-    await this.repo.indexStore.save(this.treeToIndex(tree));
+    await restoreTree(this.repo, tree);
+    await this.repo.indexStore.save(treeToIndex(tree));
     await this.repo.refs.setCurrentBranch(target);
 
     console.log(`Switched to branch '${target}'`);
-  }
-
-  private treeToIndex(tree: Map<string, string>): StagedEntry[] {
-    return [...tree.entries()]
-      .map(([path, hash]) => ({ path, hash, mode: '100644' }))
-      .sort((a, b) => a.path.localeCompare(b.path));
-  }
-
-  private async restoreTree(tree: Map<string, string>): Promise<void> {
-    const currentIndex = await this.repo.indexStore.load();
-    const targetPaths = new Set(tree.keys());
-
-    for (const entry of currentIndex) {
-      if (targetPaths.has(entry.path)) continue;
-      const full = join(this.repo.rootDir, entry.path);
-      try {
-        await unlink(full);
-      } catch {
-        // already removed
-      }
-    }
-
-    for (const [relPath, hash] of tree) {
-      const content = await this.repo.objectStore.readBlob(hash);
-      await writeFile(join(this.repo.rootDir, relPath), content);
-    }
   }
 }

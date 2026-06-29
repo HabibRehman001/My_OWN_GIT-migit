@@ -8,6 +8,7 @@ import type { Repository } from './repository.js';
 import type { StoredObjectRecord } from './object-store.js';
 import { isValidObjectHash } from './object-store.js';
 import type { CommitData, StagedEntry } from '../types/index.js';
+import { normalizeCommit, validateCommitParents } from './commit-normalize.js';
 import {
   getBranchRefPath,
   getHeadFilePath,
@@ -17,7 +18,18 @@ import {
 import { existsSync, readFile } from '../utils/file-system.js';
 
 const HEAD_REF_PATTERN = /^ref: refs\/heads\/([^\s]+)$/;
-const ALLOWED_TOP_LEVEL = new Set(['HEAD', 'config.json', 'history.log', 'index', 'objects', 'refs']);
+const ALLOWED_TOP_LEVEL = new Set([
+  'HEAD',
+  'MERGE_MSG',
+  'cache',
+  'config.json',
+  'history.log',
+  'index',
+  'merge-state.json',
+  'objects',
+  'refs',
+  'locks',
+]);
 
 export class IntegrityChecker {
   constructor(private readonly repo: Repository) {}
@@ -126,72 +138,84 @@ export class IntegrityChecker {
     visited: Set<string>,
   ): string[] {
     const issues: string[] = [];
-    const chain = new Set<string>();
-    let current: string | undefined = startHash;
+    const stack: string[] = [startHash];
 
-    while (current) {
-      if (chain.has(current)) {
-        issues.push(`Commit parent chain cycle detected at ${current}`);
-        break;
-      }
-      chain.add(current);
+    while (stack.length > 0) {
+      const current = stack.pop()!;
 
       if (visited.has(current)) {
-        break;
+        continue;
       }
       visited.add(current);
 
       if (!isValidObjectHash(current)) {
         issues.push(`Invalid commit hash in chain: ${current}`);
-        break;
+        continue;
       }
 
       const object = objects.get(current);
       if (!object) {
         issues.push(`Missing commit object: ${current}`);
-        break;
+        continue;
       }
 
       if (object.type !== 'commit') {
         issues.push(`Reference ${current} is not a commit object (found ${object.type})`);
-        break;
+        continue;
       }
 
       let commit: CommitData;
       try {
-        commit = JSON.parse(object.payload.toString('utf8')) as CommitData;
+        commit = normalizeCommit(JSON.parse(object.payload.toString('utf8')));
       } catch {
         issues.push(`Commit ${current} contains invalid JSON`);
-        break;
+        continue;
       }
 
       if (!commit.tree || typeof commit.tree !== 'string') {
         issues.push(`Commit ${current} is missing a tree reference`);
-        break;
+        continue;
       }
 
       if (!isValidObjectHash(commit.tree)) {
         issues.push(`Commit ${current} has invalid tree hash: ${commit.tree}`);
-        break;
+        continue;
       }
 
       issues.push(...this.verifyTree(commit.tree, objects, current));
+      issues.push(...validateCommitParents(commit).map((issue) => `Commit ${current}: ${issue}`));
 
-      if (commit.parent === undefined || commit.parent === null) {
-        break;
+      for (const parentHash of commit.parents) {
+        issues.push(...this.verifyCommitExists(parentHash, objects, current));
+        stack.push(parentHash);
       }
+    }
 
-      if (typeof commit.parent !== 'string') {
-        issues.push(`Commit ${current} has invalid parent reference`);
-        break;
-      }
+    return issues;
+  }
 
-      if (!isValidObjectHash(commit.parent)) {
-        issues.push(`Commit ${current} has invalid parent hash: ${commit.parent}`);
-        break;
-      }
+  private verifyCommitExists(
+    parentHash: string,
+    objects: Map<string, StoredObjectRecord>,
+    commitHash: string,
+  ): string[] {
+    const issues: string[] = [];
 
-      current = commit.parent;
+    if (!isValidObjectHash(parentHash)) {
+      issues.push(`Commit ${commitHash} references invalid parent hash: ${parentHash}`);
+      return issues;
+    }
+
+    const parentObject = objects.get(parentHash);
+    if (!parentObject) {
+      issues.push(`Commit ${commitHash} references missing parent object ${parentHash}`);
+      return issues;
+    }
+
+    if (parentObject.type !== 'commit') {
+      issues.push(
+        `Commit ${commitHash} parent ${parentHash} is not a commit object (found ${parentObject.type})`,
+      );
     }
 
     return issues;
@@ -360,6 +384,12 @@ export class IntegrityChecker {
         return;
       }
       if (top === 'refs' && second === 'heads') {
+        return;
+      }
+      if (top === 'cache' && second === 'commit-generations.json') {
+        return;
+      }
+      if (top === 'locks' && second === 'repository.lock') {
         return;
       }
 

@@ -109,3 +109,32 @@ export function getHistoryPath(rootDir: string = process.cwd()): string {
 export function getConfigPath(rootDir: string = process.cwd()): string {
   return join(getMiGitDir(rootDir), 'config.json');
 }
+
+/**
+ * getCommitGenerationsCachePath — optional derived cache (safe to delete).
+ * What: Maps commit hashes to computed generation numbers for legacy commits.
+ * How: `.migit/cache/commit-generations.json`; rebuilt on demand when missing.
+ */
+export function getCommitGenerationsCachePath(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'cache', 'commit-generations.json');
+}
+
+/** Path to in-progress merge metadata (`.migit/merge-state.json`). */
+export function getMergeStatePath(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'merge-state.json');
+}
+
+/** Default merge commit message draft (`.migit/MERGE_MSG`). */
+export function getMergeMsgPath(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'MERGE_MSG');
+}
+
+/** Directory for repository-wide lock files (`.migit/locks/`). */
+export function getLocksDir(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'locks');
+}
+
+/** Exclusive repository lock held during merge operations (`.migit/locks/repository.lock`). */
+export function getRepositoryLockPath(rootDir: string = process.cwd()): string {
+  return join(getLocksDir(rootDir), 'repository.lock');
+}

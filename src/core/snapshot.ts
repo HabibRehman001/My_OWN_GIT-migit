@@ -13,7 +13,7 @@ export async function parseTreeSnapshot(
   return objectStore.readTree(treeHash);
 }
 
-/** Load the file snapshot at HEAD (empty map when no commits yet). */
+/** Load the file snapshot at HEAD (tip of current branch; uses commit tree only). */
 export async function loadHeadSnapshot(
   objectStore: ObjectStore,
   headCommitHash: string | null,
