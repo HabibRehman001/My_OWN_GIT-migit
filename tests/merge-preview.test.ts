@@ -19,8 +19,8 @@ describe('merge preview command flow', () => {
       await repo.add(['unchanged.txt', 'shared.txt']);
       await repo.commit('base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature-only.txt', 'feature');
       await repo.add(['feature-only.txt']);
       await repo.commit('on feature');
@@ -33,7 +33,7 @@ describe('merge preview command flow', () => {
       const headBefore = await repo.refs.getHead();
       const indexBefore = await repo.indexStore.load();
 
-      const preview = await computeMergePreview(repo, 'feature');
+      const preview = await computeMergePreview(repo, 'feature/sample');
       assert.equal(preview.mergeType, 'three-way-clean');
       assert.equal(preview.counts?.unchanged, 2);
       assert.equal(preview.counts?.changedOnlyOurs, 1);
@@ -62,8 +62,8 @@ describe('merge preview command flow', () => {
       await repo.add(['src/auth/token.ts', 'package-lock.json', 'src/config.ts']);
       await repo.commit('base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'src/auth/token.ts', 'feature-token');
       await writeProjectFile(root, 'package-lock.json', 'feature-lock');
       await writeProjectFile(root, 'src/config.ts', 'feature-config');
@@ -77,7 +77,7 @@ describe('merge preview command flow', () => {
       await repo.add(['.']);
       await repo.commit('main changes');
 
-      const preview = await new MergeEngine(repo).preview('feature');
+      const preview = await new MergeEngine(repo).preview('feature/sample');
       assert.equal(preview.mergeType, 'three-way-conflicts');
       assert.equal(preview.conflicts.length, 3);
 
@@ -102,14 +102,14 @@ describe('merge preview command flow', () => {
       await repo.add(['b.txt']);
       const mainBefore = await repo.commit('B');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'c.txt', 'C');
       await repo.add(['c.txt']);
       await repo.commit('C');
 
       await new CheckoutEngine(repo).checkout('main');
-      const preview = await computeMergePreview(repo, 'feature');
+      const preview = await computeMergePreview(repo, 'feature/sample');
       assert.equal(preview.mergeType, 'fast-forward');
       assert.equal(preview.fastForwardFilesUpdated, 1);
       assert.equal(await repo.refs.getHead(), mainBefore);

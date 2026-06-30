@@ -68,17 +68,17 @@ describe('checkout branch switching', () => {
       await repo.commit('main commit');
       const mainHead = await repo.refs.getHead();
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature.txt', 'on feature');
       await repo.add(['feature.txt']);
       await repo.commit('feature commit');
-      const featureHead = await repo.refs.readBranch('feature');
+      const featureHead = await repo.refs.readBranch('feature/sample');
 
-      await new CheckoutEngine(repo).checkout('feature');
-      assert.equal(await repo.getCurrentBranch(), 'feature');
+      await new CheckoutEngine(repo).checkout('feature/sample');
+      assert.equal(await repo.getCurrentBranch(), 'feature/sample');
       assert.equal(await repo.refs.readBranch('main'), mainHead);
-      assert.equal(await repo.refs.readBranch('feature'), featureHead);
+      assert.equal(await repo.refs.readBranch('feature/sample'), featureHead);
 
       const headContent = (await readFile(getHeadFilePath(root))).toString('utf8');
       assert.match(headContent, /refs\/heads\/feature/);

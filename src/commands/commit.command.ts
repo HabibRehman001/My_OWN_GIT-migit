@@ -9,6 +9,15 @@ import { generateSmartCommitMessage } from '../ai/smart-commit.js';
 import { withHistoryAction } from '../cli/with-history.js';
 import { confirmCommitMessage } from '../utils/prompt-confirm.js';
 import { MiGitError } from '../utils/errors.js';
+import {
+  collectCommitPolicyWarnings,
+  formatPolicyWarnings,
+} from '../utils/branch-policy.js';
+import {
+  collectOwnershipWarnings,
+  formatOwnershipWarnings,
+} from '../utils/ownership-warnings.js';
+import { setHistorySuccessExtras } from '../history/history-context.js';
 
 export function registerCommitCommand(program: Command): void {
   program
@@ -18,6 +27,7 @@ export function registerCommitCommand(program: Command): void {
     .option('--smart', 'generate commit message with Gemini')
     .option('--paths-only', 'with --smart, send only file paths (no diff metadata)')
     .option('-y, --yes', 'with --smart, skip commit message confirmation')
+    .option('--override-policy', 'allow direct commits to protected branches (maintainer override)')
     .action(
       withHistoryAction(
         'commit',
@@ -26,6 +36,7 @@ export function registerCommitCommand(program: Command): void {
           smart?: boolean;
           pathsOnly?: boolean;
           yes?: boolean;
+          overridePolicy?: boolean;
         }) => {
           const repo = Repository.open();
           let message = options.message;
@@ -61,7 +72,33 @@ export function registerCommitCommand(program: Command): void {
             );
           }
 
-          const hash = await repo.commit(message.trim());
+          const policy = await repo.policyStore.load();
+          const policyWarnings = collectCommitPolicyWarnings(committedFiles.length, policy);
+          if (policyWarnings.length > 0) {
+            console.log(formatPolicyWarnings(policyWarnings));
+            console.log();
+          }
+
+          const branch = await repo.getCurrentBranch();
+          const ownership = await repo.ownershipStore.load();
+          const ownershipWarnings = collectOwnershipWarnings(
+            branch,
+            committedFiles.map((change) => change.path),
+            ownership,
+          );
+          const ownershipMessage = formatOwnershipWarnings(branch, ownershipWarnings);
+          if (ownershipMessage) {
+            console.log(ownershipMessage);
+            console.log();
+          }
+
+          if (options.overridePolicy) {
+            setHistorySuccessExtras({ policyOverride: true, branch });
+          }
+
+          const hash = await repo.commit(message.trim(), {
+            overridePolicy: options.overridePolicy,
+          });
           console.log(`[commit ${hash.slice(0, 7)}] ${message.trim()}`);
           for (const change of committedFiles) {
             console.log(formatCommitFileChange(change));

@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Repository } from '../../src/core/repository.js';
+import { createDefaultPolicy } from '../../src/core/policy-store.js';
 
 export interface TempRepo {
   root: string;
@@ -9,10 +10,19 @@ export interface TempRepo {
   cleanup: () => Promise<void>;
 }
 
-export async function createTempRepo(): Promise<TempRepo> {
+export async function createTempRepo(options?: {
+  strictPolicy?: boolean;
+}): Promise<TempRepo> {
   const root = await mkdtemp(join(tmpdir(), 'migit-test-'));
   const repo = Repository.at(root);
   await repo.init();
+
+  if (!options?.strictPolicy) {
+    await repo.policyStore.save({
+      ...createDefaultPolicy(),
+      preventDirectCommitToProtectedBranches: false,
+    });
+  }
 
   return {
     root,

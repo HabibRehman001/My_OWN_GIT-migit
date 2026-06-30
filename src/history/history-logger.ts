@@ -12,6 +12,10 @@ export interface HistoryAppendEntry {
   durationMs: number;
   timestamp: string;
   error?: string;
+  /** Set when a maintainer bypasses branch policy (e.g. commit --override-policy). */
+  policyOverride?: boolean;
+  /** Active branch when policyOverride was recorded. */
+  branch?: string;
 }
 
 /** Structured entry written by HistoryLogger.append (since v0.2). */

@@ -33,8 +33,8 @@ describe('ancestry utilities', () => {
     try {
       const base = await commitFile(repo, root, 'base.txt', 'base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       const featureTip = await commitFile(repo, root, 'feature.txt', 'feature');
 
       await new CheckoutEngine(repo).checkout('main');
@@ -80,8 +80,8 @@ describe('ancestry utilities', () => {
     try {
       const base = await commitFile(repo, root, 'shared.txt', 'shared');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       const featureTip = await commitFile(repo, root, 'on-feature.txt', 'feature work');
 
       await new CheckoutEngine(repo).checkout('main');

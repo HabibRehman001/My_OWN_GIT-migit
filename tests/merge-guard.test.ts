@@ -12,8 +12,8 @@ async function startConflictMerge(root: string, repo: Awaited<ReturnType<typeof 
   await repo.add(['shared.txt']);
   await repo.commit('base');
 
-  await repo.createBranch('feature');
-  await new CheckoutEngine(repo).checkout('feature');
+  await repo.createBranch('feature/sample');
+  await new CheckoutEngine(repo).checkout('feature/sample');
   await writeProjectFile(root, 'shared.txt', 'feature');
   await repo.add(['shared.txt']);
   await repo.commit('feature');
@@ -23,7 +23,7 @@ async function startConflictMerge(root: string, repo: Awaited<ReturnType<typeof 
   await repo.add(['shared.txt']);
   await repo.commit('main');
 
-  await new MergeEngine(repo).merge('feature');
+  await new MergeEngine(repo).merge('feature/sample');
 }
 
 describe('merge in progress guards', () => {
@@ -51,7 +51,7 @@ describe('merge in progress guards', () => {
       await startConflictMerge(root, repo);
 
       await assert.rejects(
-        () => new CheckoutEngine(repo).checkout('feature'),
+        () => new CheckoutEngine(repo).checkout('feature/sample'),
         (error: unknown) =>
           error instanceof MiGitError &&
           error.message.includes('Checkout stopped.') &&
@@ -68,7 +68,7 @@ describe('merge in progress guards', () => {
       await startConflictMerge(root, repo);
 
       await assert.rejects(
-        () => repo.deleteBranch('feature'),
+        () => repo.deleteBranch('feature/sample'),
         (error: unknown) =>
           error instanceof MiGitError &&
           error.message.includes('Branch delete stopped.') &&
@@ -85,7 +85,7 @@ describe('merge in progress guards', () => {
       await startConflictMerge(root, repo);
 
       await assert.rejects(
-        () => new MergeEngine(repo).merge('feature'),
+        () => new MergeEngine(repo).merge('feature/sample'),
         (error: unknown) =>
           error instanceof MiGitError &&
           error.message.includes('Merge stopped.') &&

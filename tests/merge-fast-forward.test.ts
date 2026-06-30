@@ -19,8 +19,8 @@ describe('fast-forward merge', () => {
       await repo.add(['main.txt']);
       const commitB = await repo.commit('B');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature-one.txt', 'C');
       await repo.add(['feature-one.txt']);
       await repo.commit('C');
@@ -31,7 +31,7 @@ describe('fast-forward merge', () => {
       await new CheckoutEngine(repo).checkout('main');
       assert.equal(await repo.refs.readBranch('main'), commitB);
 
-      const result = await new MergeEngine(repo).merge('feature');
+      const result = await new MergeEngine(repo).merge('feature/sample');
       assert.equal(result.type, 'fast-forward');
       if (result.type === 'fast-forward') {
         assert.equal(result.from, commitB);
@@ -41,7 +41,7 @@ describe('fast-forward merge', () => {
       }
 
       assert.equal(await repo.refs.readBranch('main'), commitD);
-      assert.equal(await repo.refs.readBranch('feature'), commitD);
+      assert.equal(await repo.refs.readBranch('feature/sample'), commitD);
       assert.equal(await repo.getCurrentBranch(), 'main');
 
       assert.equal((await readFile(join(root, 'shared.txt'))).toString('utf8'), 'A');
@@ -63,12 +63,12 @@ describe('fast-forward merge', () => {
       await repo.add(['a.txt']);
       await repo.commit('initial');
 
-      await repo.createBranch('feature');
-      const result = await new MergeEngine(repo).merge('feature');
+      await repo.createBranch('feature/sample');
+      const result = await new MergeEngine(repo).merge('feature/sample');
       assert.equal(result.type, 'already-up-to-date');
       if (result.type === 'already-up-to-date') {
         assert.equal(result.branch, 'main');
-        assert.equal(result.sourceBranch, 'feature');
+        assert.equal(result.sourceBranch, 'feature/sample');
       }
     } finally {
       await cleanup();
@@ -90,17 +90,17 @@ describe('fast-forward merge', () => {
       await repo.add(['c.txt']);
       await repo.commit('C');
 
-      await repo.createBranch('feature');
+      await repo.createBranch('feature/sample');
 
       await writeProjectFile(root, 'd.txt', 'D');
       await repo.add(['d.txt']);
       const mainHead = await repo.commit('D');
 
-      const result = await new MergeEngine(repo).merge('feature');
+      const result = await new MergeEngine(repo).merge('feature/sample');
       assert.equal(result.type, 'already-up-to-date');
       if (result.type === 'already-up-to-date') {
         assert.equal(result.branch, 'main');
-        assert.equal(result.sourceBranch, 'feature');
+        assert.equal(result.sourceBranch, 'feature/sample');
       }
 
       assert.equal(await repo.refs.getHead(), mainHead);
@@ -117,8 +117,8 @@ describe('fast-forward merge', () => {
       await repo.add(['base.txt']);
       await repo.commit('base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'on-feature.txt', 'feature');
       await repo.add(['on-feature.txt']);
       await repo.commit('on feature');
@@ -129,7 +129,7 @@ describe('fast-forward merge', () => {
       await repo.commit('on main');
 
       await assert.rejects(
-        () => new MergeEngine(repo).merge('feature'),
+        () => new MergeEngine(repo).merge('feature/sample'),
         (error: unknown) =>
           error instanceof MiGitError &&
           error.message.includes('merge commits are not yet supported'),
@@ -147,8 +147,8 @@ describe('fast-forward merge', () => {
       await repo.add(['base.txt']);
       await repo.commit('base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature.txt', 'feature');
       await repo.add(['feature.txt']);
       await repo.commit('feature work');
@@ -158,7 +158,7 @@ describe('fast-forward merge', () => {
       await repo.add(['dirty.txt']);
 
       await assert.rejects(
-        () => new MergeEngine(repo).merge('feature'),
+        () => new MergeEngine(repo).merge('feature/sample'),
         (error: unknown) => error instanceof MiGitError,
       );
     } finally {

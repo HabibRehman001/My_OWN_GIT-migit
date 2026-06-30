@@ -53,7 +53,7 @@ export function resolveAiModel(config: MiGitConfig): string {
 
 function mergeWithDefaults(partial: Partial<MiGitConfig>): MiGitConfig {
   const defaults = createDefaultConfig();
-  return {
+  const merged: MiGitConfig = {
     user: {
       name: partial.user?.name?.trim() || defaults.user.name,
       email: partial.user?.email?.trim() || defaults.user.email,
@@ -63,6 +63,12 @@ function mergeWithDefaults(partial: Partial<MiGitConfig>): MiGitConfig {
       ...(partial.ai?.model?.trim() ? { model: partial.ai.model.trim() } : {}),
     },
   };
+
+  if (partial.branches) {
+    merged.branches = { ...partial.branches };
+  }
+
+  return merged;
 }
 
 function stripSecretFields(raw: Record<string, unknown>): Partial<MiGitConfig> {
@@ -84,6 +90,10 @@ function toPersistedConfig(config: MiGitConfig): Record<string, unknown> {
 
   if (config.ai.model?.trim()) {
     (persisted.ai as Record<string, string>).model = config.ai.model.trim();
+  }
+
+  if (config.branches) {
+    persisted.branches = config.branches;
   }
 
   return persisted;

@@ -7,6 +7,7 @@ import { sanitizeArgs, getSafeErrorMessage } from './history-sanitize.js';
 import { findRepositoryRoot, getMiGitDir } from '../utils/paths.js';
 import { existsSync } from '../utils/file-system.js';
 import type { HistoryAppendEntry } from './history-logger.js';
+import { consumeHistorySuccessExtras } from './history-context.js';
 
 function resolveHistoryRoot(command: string): string | null {
   try {
@@ -49,6 +50,7 @@ export async function runWithHistory<T>(
       status: 'success',
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
+      ...consumeHistorySuccessExtras(),
     });
 
     return result;

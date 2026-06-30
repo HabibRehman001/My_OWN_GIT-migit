@@ -16,6 +16,8 @@ import {
   getIndexPath,
 } from '../utils/paths.js';
 import { existsSync, readFile } from '../utils/file-system.js';
+import { resolveBranchStandards, branchStandardsIssue } from '../utils/branch-standards.js';
+import { branchPolicyIssue } from '../utils/branch-policy.js';
 
 const HEAD_REF_PATTERN = /^ref: refs\/heads\/([^\s]+)$/;
 const ALLOWED_TOP_LEVEL = new Set([
@@ -27,6 +29,8 @@ const ALLOWED_TOP_LEVEL = new Set([
   'index',
   'merge-state.json',
   'objects',
+  'ownership.json',
+  'policy.json',
   'refs',
   'locks',
 ]);
@@ -38,7 +42,11 @@ export class IntegrityChecker {
     const issues: string[] = [];
 
     issues.push(...this.repo.configStore.verify());
+    issues.push(...this.repo.policyStore.verify());
+    issues.push(...this.repo.ownershipStore.verify());
     issues.push(...(await this.verifyHeadAndBranches()));
+    issues.push(...(await this.verifyBranchStandards()));
+    issues.push(...(await this.verifyBranchPolicy()));
 
     const storage = await this.repo.objectStore.verifyStorage();
     issues.push(...storage.issues);
@@ -107,6 +115,38 @@ export class IntegrityChecker {
 
       if (!isValidObjectHash(hash)) {
         issues.push(`Branch refs/heads/${branch} points to invalid hash: ${hash}`);
+      }
+    }
+
+    return issues;
+  }
+
+  private async verifyBranchStandards(): Promise<string[]> {
+    const config = await this.repo.configStore.load();
+    const standards = resolveBranchStandards(config);
+    if (!standards.enabled) {
+      return [];
+    }
+
+    const issues: string[] = [];
+    for (const branch of await this.repo.refs.listBranches()) {
+      const message = branchStandardsIssue(branch, standards);
+      if (message) {
+        issues.push(`Branch "${branch}" violates naming standards: ${message}`);
+      }
+    }
+
+    return issues;
+  }
+
+  private async verifyBranchPolicy(): Promise<string[]> {
+    const policy = await this.repo.policyStore.load();
+    const issues: string[] = [];
+
+    for (const branch of await this.repo.refs.listBranches()) {
+      const message = branchPolicyIssue(branch, policy);
+      if (message) {
+        issues.push(`Branch "${branch}" violates policy: ${message}`);
       }
     }
 

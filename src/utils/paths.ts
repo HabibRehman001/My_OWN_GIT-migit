@@ -104,6 +104,20 @@ export function getHistoryPath(rootDir: string = process.cwd()): string {
 }
 
 /**
+ * getOwnershipPath — returns `.migit/ownership.json` (team path ownership rules).
+ */
+export function getOwnershipPath(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'ownership.json');
+}
+
+/**
+ * getPolicyPath — returns `.migit/policy.json` (branch and merge policies).
+ */
+export function getPolicyPath(rootDir: string = process.cwd()): string {
+  return join(getMiGitDir(rootDir), 'policy.json');
+}
+
+/**
  * getConfigPath — returns `.migit/config.json` (author and AI settings).
  */
 export function getConfigPath(rootDir: string = process.cwd()): string {

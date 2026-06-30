@@ -24,8 +24,8 @@ describe('merge with conflicts', () => {
       await repo.add(['src/auth/token.ts', 'package-lock.json', 'src/config.ts']);
       await repo.commit('base');
 
-      await repo.createBranch('feature-login');
-      await new CheckoutEngine(repo).checkout('feature-login');
+      await repo.createBranch('feature/login');
+      await new CheckoutEngine(repo).checkout('feature/login');
       await writeProjectFile(root, 'src/auth/token.ts', 'feature-token');
       await writeProjectFile(root, 'package-lock.json', 'feature-lock');
       await writeProjectFile(root, 'src/config.ts', 'feature-config');
@@ -39,26 +39,26 @@ describe('merge with conflicts', () => {
       await repo.add(['.']);
       const mainHead = await repo.commit('main changes');
 
-      const result = await new MergeEngine(repo).merge('feature-login');
+      const result = await new MergeEngine(repo).merge('feature/login');
       assert.equal(result.type, 'conflicts');
       if (result.type !== 'conflicts') {
         return;
       }
 
       assert.equal(result.branch, 'main');
-      assert.equal(result.sourceBranch, 'feature-login');
+      assert.equal(result.sourceBranch, 'feature/login');
       assert.equal(result.ourCommit, mainHead);
       assert.equal(result.theirCommit, featureHead);
       assert.equal(result.conflicts.length, 3);
       assert.equal(await repo.refs.getHead(), mainHead);
       assert.equal(await repo.refs.readBranch('main'), mainHead);
-      assert.equal(await repo.refs.readBranch('feature-login'), featureHead);
+      assert.equal(await repo.refs.readBranch('feature/login'), featureHead);
 
       const mergeState = await loadMergeState(root);
       assert.ok(mergeState);
       assert.equal(mergeState.version, MERGE_STATE_VERSION);
       assert.equal(mergeState.currentBranch, 'main');
-      assert.equal(mergeState.incomingBranch, 'feature-login');
+      assert.equal(mergeState.incomingBranch, 'feature/login');
       assert.equal(mergeState.ourCommit, mainHead);
       assert.equal(mergeState.theirCommit, featureHead);
       assert.ok(mergeState.baseCommit);
@@ -76,13 +76,13 @@ describe('merge with conflicts', () => {
       assert.ok(tokenConflict.baseHash);
 
       const mergeMsg = (await readFile(getMergeMsgPath(root))).toString('utf8');
-      assert.equal(mergeMsg, `${formatMergeMessage('feature-login', 'main')}\n`);
+      assert.equal(mergeMsg, `${formatMergeMessage('feature/login', 'main')}\n`);
 
       const rawState = JSON.parse(
         (await readFile(getMergeStatePath(root))).toString('utf8'),
       );
       assert.equal(rawState.version, 1);
-      assert.equal(rawState.incomingBranch, 'feature-login');
+      assert.equal(rawState.incomingBranch, 'feature/login');
     } finally {
       await cleanup();
     }
@@ -95,8 +95,8 @@ describe('merge with conflicts', () => {
       await repo.add(['src/auth/token.ts']);
       await repo.commit('base');
 
-      await repo.createBranch('feature-login');
-      await new CheckoutEngine(repo).checkout('feature-login');
+      await repo.createBranch('feature/login');
+      await new CheckoutEngine(repo).checkout('feature/login');
       await writeProjectFile(root, 'src/auth/token.ts', 'feature-token');
       await repo.add(['src/auth/token.ts']);
       await repo.commit('feature');
@@ -106,14 +106,14 @@ describe('merge with conflicts', () => {
       await repo.add(['src/auth/token.ts']);
       await repo.commit('main');
 
-      await new MergeEngine(repo).merge('feature-login');
+      await new MergeEngine(repo).merge('feature/login');
 
       const working = (await readFile(join(root, 'src/auth/token.ts'))).toString('utf8');
       assert.match(working, /^<<<<<<< current:main/);
       assert.ok(working.includes('main-token'));
       assert.ok(working.includes('base-token'));
       assert.ok(working.includes('feature-token'));
-      assert.match(working, />>>>>>> incoming:feature-login$/m);
+      assert.match(working, />>>>>>> incoming:feature\/login$/m);
     } finally {
       await cleanup();
     }
@@ -126,8 +126,8 @@ describe('merge with conflicts', () => {
       await repo.add(['shared.txt']);
       await repo.commit('base');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'shared.txt', 'feature');
       await repo.add(['shared.txt']);
       await repo.commit('feature');
@@ -137,11 +137,11 @@ describe('merge with conflicts', () => {
       await repo.add(['shared.txt']);
       await repo.commit('main');
 
-      const first = await new MergeEngine(repo).merge('feature');
+      const first = await new MergeEngine(repo).merge('feature/sample');
       assert.equal(first.type, 'conflicts');
 
       await assert.rejects(
-        () => new MergeEngine(repo).merge('feature'),
+        () => new MergeEngine(repo).merge('feature/sample'),
         (error: unknown) =>
           error instanceof MiGitError && error.message.includes('A merge is currently in progress'),
       );

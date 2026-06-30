@@ -10,7 +10,9 @@
  * another branch's commit hash.
  */
 
-import { readFile, readdir, unlink } from '../utils/file-system.js';
+import { readdir as fsReaddir, rmdir } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { readFile, unlink, ensureDir } from '../utils/file-system.js';
 import { getHeadFilePath, getBranchRefPath, getRefsDir } from '../utils/paths.js';
 import { existsSync } from '../utils/file-system.js';
 import { atomicWrite } from '../utils/atomic-write.js';
@@ -100,15 +102,19 @@ export class Refs {
     const path = getBranchRefPath(this.rootDir, name);
     if (hash === null) {
       await unlink(path);
+      await this.pruneEmptyRefDirs(dirname(path));
     } else {
+      await ensureDir(dirname(path));
       await atomicWrite(path, `${hash}\n`);
     }
   }
 
+  /** Lists branch names, including nested refs such as feature/login. */
   async listBranches(): Promise<string[]> {
-    const dir = `${getRefsDir(this.rootDir)}/heads`;
+    const headsDir = join(getRefsDir(this.rootDir), 'heads');
     try {
-      return await readdir(dir);
+      const branches = await this.collectBranchNames(headsDir, '');
+      return branches.sort();
     } catch {
       return [];
     }
@@ -116,15 +122,66 @@ export class Refs {
 
   async deleteBranch(name: string): Promise<void> {
     validateBranchName(name);
-    await unlink(getBranchRefPath(this.rootDir, name));
+    const path = getBranchRefPath(this.rootDir, name);
+    await unlink(path);
+    await this.pruneEmptyRefDirs(dirname(path));
   }
 
   /** Remove all branch ref files (used when reinitializing a repository). */
   async clearBranchRefs(): Promise<void> {
-    for (const branch of await this.listBranches()) {
-      const path = getBranchRefPath(this.rootDir, branch);
-      if (existsSync(path)) {
-        await unlink(path);
+    const headsDir = join(getRefsDir(this.rootDir), 'heads');
+    if (!existsSync(headsDir)) {
+      return;
+    }
+    await this.removeRefTree(headsDir);
+  }
+
+  private async collectBranchNames(dir: string, prefix: string): Promise<string[]> {
+    const entries = await fsReaddir(dir, { withFileTypes: true });
+    const branches: string[] = [];
+
+    for (const entry of entries) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const fullPath = join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        branches.push(...(await this.collectBranchNames(fullPath, rel)));
+      } else if (entry.isFile()) {
+        branches.push(rel);
+      }
+    }
+
+    return branches;
+  }
+
+  private async removeRefTree(dir: string): Promise<void> {
+    const entries = await fsReaddir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await this.removeRefTree(fullPath);
+        await rmdir(fullPath).catch(() => {});
+      } else {
+        await unlink(fullPath);
+      }
+    }
+  }
+
+  private async pruneEmptyRefDirs(startDir: string): Promise<void> {
+    const headsDir = join(getRefsDir(this.rootDir), 'heads');
+    let current = startDir;
+
+    while (current.startsWith(headsDir) && current !== headsDir) {
+      try {
+        const entries = await fsReaddir(current);
+        if (entries.length > 0) {
+          break;
+        }
+        await rmdir(current);
+        current = dirname(current);
+      } catch {
+        break;
       }
     }
   }

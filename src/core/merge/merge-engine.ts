@@ -42,6 +42,7 @@ import {
   createRepositoryLock,
 } from '../repository-lock.js';
 import { MiGitError } from '../../utils/errors.js';
+import { shouldRequireCleanWorkingTreeForMerge } from '../../utils/branch-policy.js';
 
 export type FastForwardMergeResult = {
   type: 'fast-forward';
@@ -156,12 +157,15 @@ export class MergeEngine {
     }
 
     if (!options.force) {
-      const status = await new StatusEngine(this.repo).getStatus();
-      const blockers = findCheckoutBlockers(status, theirTree);
-      if (blockers.length > 0) {
-        throw new MiGitError(
-          formatCheckoutBlockedMessage(blockers).replace('Checkout stopped.', 'Merge stopped.'),
-        );
+      const policy = await this.repo.policyStore.load();
+      if (shouldRequireCleanWorkingTreeForMerge(policy)) {
+        const status = await new StatusEngine(this.repo).getStatus();
+        const blockers = findCheckoutBlockers(status, theirTree);
+        if (blockers.length > 0) {
+          throw new MiGitError(
+            formatCheckoutBlockedMessage(blockers).replace('Checkout stopped.', 'Merge stopped.'),
+          );
+        }
       }
     }
 
@@ -230,12 +234,15 @@ export class MergeEngine {
     }
 
     if (!options.force) {
-      const status = await new StatusEngine(this.repo).getStatus();
-      const blockers = findCheckoutBlockers(status, treeMerge.mergedFiles);
-      if (blockers.length > 0) {
-        throw new MiGitError(
-          formatCheckoutBlockedMessage(blockers).replace('Checkout stopped.', 'Merge stopped.'),
-        );
+      const policy = await this.repo.policyStore.load();
+      if (shouldRequireCleanWorkingTreeForMerge(policy)) {
+        const status = await new StatusEngine(this.repo).getStatus();
+        const blockers = findCheckoutBlockers(status, treeMerge.mergedFiles);
+        if (blockers.length > 0) {
+          throw new MiGitError(
+            formatCheckoutBlockedMessage(blockers).replace('Checkout stopped.', 'Merge stopped.'),
+          );
+        }
       }
     }
 

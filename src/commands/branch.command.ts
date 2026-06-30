@@ -7,6 +7,7 @@
 import type { Command } from 'commander';
 import { Repository } from '../core/repository.js';
 import { withHistoryAction } from '../cli/with-history.js';
+import { formatBranchStandardsHelp, resolveBranchStandards } from '../utils/branch-standards.js';
 
 /**
  * registerBranchCommand — attaches `branch [name]` with optional delete flag.
@@ -21,9 +22,17 @@ export function registerBranchCommand(program: Command): void {
     .command('branch [name]')
     .description('List, create, or delete branches')
     .option('-d, --delete', 'delete a branch')
+    .option('--no-verify', 'skip branch naming standards when creating a branch')
+    .option('--standards', 'show branch naming conventions')
     .action(
-      withHistoryAction('branch', async (name: string | undefined, options: { delete?: boolean }) => {
+      withHistoryAction('branch', async (name: string | undefined, options: { delete?: boolean; noVerify?: boolean; standards?: boolean }) => {
       const repo = Repository.open();
+
+      if (options.standards) {
+        const config = await repo.configStore.load();
+        console.log(formatBranchStandardsHelp(resolveBranchStandards(config)));
+        return;
+      }
 
       if (!name) {
         const branches = await repo.listBranches();
@@ -40,7 +49,7 @@ export function registerBranchCommand(program: Command): void {
         await repo.deleteBranch(name);
         console.log(`Deleted branch ${name}`);
       } else {
-        await repo.createBranch(name);
+        await repo.createBranch(name, { noVerify: options.noVerify });
         console.log(`Created branch ${name}`);
       }
     }),

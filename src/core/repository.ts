@@ -10,14 +10,18 @@ import { IndexStore } from './index-store.js';
 import { Refs } from './refs.js';
 import { Scanner } from './scanner.js';
 import { ConfigStore, createDefaultConfig } from './config-store.js';
+import { PolicyStore, createDefaultPolicy } from './policy-store.js';
+import { OwnershipStore, createDefaultOwnership } from './ownership-store.js';
 import { IntegrityChecker } from './integrity-checker.js';
 import { createCommit } from './commit.js';
 import { getPrimaryParent } from './commit-normalize.js';
 import { GenerationResolver, generationFromParents } from './merge/generation.js';
-import { createSnapshot } from './snapshot.js';
+import { createSnapshot, loadHeadSnapshot } from './snapshot.js';
 import { getMiGitDir, findRepositoryRoot } from '../utils/paths.js';
 import { findScopedDeletions } from '../utils/add-scope.js';
 import { validateBranchName } from '../utils/branch-name.js';
+import { resolveBranchStandards, validateBranchStandards } from '../utils/branch-standards.js';
+import { assertDirectCommitAllowed, validateBranchPolicy } from '../utils/branch-policy.js';
 import { ensureDir, existsSync } from '../utils/file-system.js';
 import { MiGitError } from '../utils/errors.js';
 import { assertNoMergeDuringBranchDelete, assertNoMergeDuringCommit } from './merge/merge-guard.js';
@@ -35,6 +39,8 @@ export class Repository {
   readonly refs: Refs;
   readonly scanner: Scanner;
   readonly configStore: ConfigStore;
+  readonly policyStore: PolicyStore;
+  readonly ownershipStore: OwnershipStore;
 
   /**
    * open — discovers and opens the repository containing the current working directory.
@@ -65,6 +71,8 @@ export class Repository {
     this.refs = new Refs(rootDir);
     this.scanner = new Scanner(rootDir, this.objectStore);
     this.configStore = new ConfigStore(rootDir);
+    this.policyStore = new PolicyStore(rootDir);
+    this.ownershipStore = new OwnershipStore(rootDir);
   }
 
   /**
@@ -98,6 +106,8 @@ export class Repository {
     await this.refs.initHead('main');
     await this.indexStore.save([]);
     await this.configStore.save(createDefaultConfig(options));
+    await this.policyStore.save(createDefaultPolicy());
+    await this.ownershipStore.save(createDefaultOwnership());
     await ensureDefaultMigitignore(this.rootDir);
 
     return alreadyExists ? 'reinitialized' : 'created';
@@ -136,11 +146,34 @@ export class Repository {
    * commit — creates a commit from the complete index; index is kept after commit.
    * HEAD tree = index = clean working tree when nothing has changed on disk.
    */
-  async commit(message: string): Promise<string> {
+  async commit(message: string, options?: { overridePolicy?: boolean }): Promise<string> {
     this.assertInitialized();
     assertNoMergeDuringCommit(this.rootDir);
     await assertRepositoryUnlockedAsync(this.rootDir);
+
+    const currentBranch = await this.getCurrentBranch();
+    const head = await this.refs.getHead();
     const index = await this.indexStore.load();
+    const policy = await this.policyStore.load();
+
+    let changedPaths: string[] = [];
+    if (head !== null) {
+      const indexMap = new Map(index.map((entry) => [entry.path, entry.hash]));
+      const headMap = await loadHeadSnapshot(this.objectStore, head);
+      for (const path of new Set([...indexMap.keys(), ...headMap.keys()])) {
+        if (indexMap.get(path) !== headMap.get(path)) {
+          changedPaths.push(path);
+        }
+      }
+      changedPaths.sort((a, b) => a.localeCompare(b));
+    }
+
+    assertDirectCommitAllowed(currentBranch, policy, {
+      hasExistingCommits: head !== null,
+      changedPaths,
+      overridePolicy: options?.overridePolicy,
+    });
+
     const tree = await createSnapshot(this.objectStore, index);
     const parent = await this.refs.getHead();
     const parents = parent ? [parent] : [];
@@ -215,9 +248,17 @@ export class Repository {
   /**
    * createBranch — creates a new branch pointing at the current HEAD commit.
    */
-  async createBranch(name: string): Promise<void> {
+  async createBranch(name: string, options?: { noVerify?: boolean }): Promise<void> {
     this.assertInitialized();
     validateBranchName(name);
+
+    const policy = await this.policyStore.load();
+    validateBranchPolicy(name, policy);
+
+    if (!options?.noVerify) {
+      const config = await this.configStore.load();
+      validateBranchStandards(name, resolveBranchStandards(config));
+    }
 
     const branches = await this.listBranches();
     if (branches.includes(name)) {

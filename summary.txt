@@ -18,7 +18,7 @@ update the affected sections below (commands, core modules, tests, limitations).
 ADDED:
   • npm test — Node built-in test runner + tsx (tests/**/*.test.ts)
   • tests/helpers/temp-repo.ts — isolated /tmp repos per test
-  • 33 test files, 111 tests (see section 21)
+  • 37 test files, 145 tests (see section 21)
 HOW IT WORKS:
   Each test creates its own temp directory, runs migit core APIs, asserts, cleanup.
   No Jest — zero extra test framework beyond tsx for TypeScript import.
@@ -239,6 +239,84 @@ HOW IT WORKS:
   Non-conflicting lines before/after each conflict are still auto-merged into the marked file.
   Binary and add-add / modify-delete conflicts still have no marked blob.
 
+─── PHASE: Team ownership warnings (Phase 23) ───
+ADDED:
+  • .migit/ownership.json — path glob → team rules (backend, frontend, database, devops)
+  • src/core/ownership-store.ts — OwnershipStore.load/save/verify(), createDefaultOwnership()
+  • src/utils/ownership-warnings.ts — matchPathPattern(), collect/format warnings
+  • OwnershipRule / MiGitOwnership types in types/index.ts
+  • getOwnershipPath() in paths.ts
+  • tests/ownership.test.ts — path matching, warning format, non-blocking commit
+CHANGED:
+  • repository.init() — writes default ownership.json
+  • commit.command — prints ownership warnings before commit (warnings only, never blocks)
+  • integrity-checker — verifies ownership.json; allows file in .migit/
+HOW IT WORKS:
+  For team/<team>/... branches, changed paths are matched against ownership.json rules.
+  When owner team differs from branch team (e.g. team/frontend/* changing src/api/**),
+  migit commit prints a Warning with branch, path, suggested owner, and a non-blocking note.
+
+─── PHASE: Protect the main branch (Phase 22) ───
+ADDED:
+  • migit commit --override-policy — maintainer bypass for protected-branch direct commits
+  • suggestWorkingBranchName() / formatProtectedBranchCommitError() in branch-policy.ts
+  • history-context.ts — setHistorySuccessExtras() for policy override metadata
+  • HistoryAppendEntry.policyOverride and .branch fields in history.log
+  • tests/protected-main.test.ts — error guidance, override commit, history recording
+CHANGED:
+  • Protected-branch error now suggests concrete branch commands (e.g. feature/change-app from src/app.ts)
+  • repository.commit(message, { overridePolicy }) — skips protected-branch guard when overridden
+  • run-with-history — merges success extras (policyOverride, branch) into history entries
+HOW IT WORKS:
+  Direct commits to protectedBranches (e.g. main) are blocked after the first commit.
+  Error message includes migit branch / migit checkout commands derived from staged paths.
+  --override-policy allows emergency commits; successful overrides log policyOverride: true and branch.
+
+─── PHASE: Branch policies (Phase 21) ───
+ADDED:
+  • .migit/policy.json — declarative branch and merge policies (no shell commands)
+  • src/core/policy-store.ts — PolicyStore.load/save/verify(), createDefaultPolicy()
+  • src/utils/branch-policy.ts — pattern matching, protected branches, policy warnings
+  • MiGitPolicy type in types/index.ts
+  • getPolicyPath() in paths.ts
+  • tests/policy.test.ts — init policy file, protected commits, warnings, doctor, dirty merge policy
+CHANGED:
+  • repository.init() — writes default policy.json alongside config.json
+  • repository.createBranch() — always validates allowedBranchPatterns (not bypassed by --no-verify)
+  • repository.commit() — blocks direct commits to protectedBranches when policy enabled
+  • merge-engine — requireCleanWorkingTreeForMerge from policy (when false, merge skips dirty check)
+  • commit.command / merge.command — print Policy warning: lines for large changes and shared paths
+  • integrity-checker — verifies policy.json; doctor warns on branches violating patterns
+  • tests/helpers/temp-repo.ts — relaxes preventDirectCommitToProtectedBranches for most tests
+HOW IT WORKS:
+  policy.json holds version, defaultBranch, protectedBranches, allowedBranchPatterns (globs),
+  requireCleanWorkingTreeForMerge, preventDirectCommitToProtectedBranches, warnChangedFilesAbove,
+  and warnSharedPaths. No hooks/commands/scripts fields — rejected on load for security.
+  First commit on main is allowed; later direct commits to protected branches are blocked.
+  merge --continue still creates merge commits on protected branches. Pattern * matches one segment.
+
+─── PHASE: Simple branch standards (Phase 20) ───
+ADDED:
+  • src/utils/branch-standards.ts — resolveBranchStandards(), validateBranchStandards()
+  • Nested branch refs — refs.listBranches() recurses .migit/refs/heads/** (e.g. feature/login)
+  • migit branch --standards — print naming conventions
+  • migit branch --no-verify — skip standards on create
+  • Optional branches section in .migit/config.json (allowedPrefixes, defaultBranch, enabled)
+  • BranchStandardsConfig in types/index.ts
+  • tests/branch-standards.test.ts — nested refs, validation, doctor warnings, --no-verify
+CHANGED:
+  • refs.ts — ensureDir on nested setBranch; prune empty ref dirs on delete; recursive clearBranchRefs
+  • repository.createBranch(name, { noVerify }) — validates standards before create
+  • integrity-checker — doctor warns on existing branches that violate standards
+  • Merge/integration tests — branch names updated to feature/sample, feature/login, etc.
+HOW IT WORKS:
+  Trunk is main (always exempt). Task branches must use allowed prefixes:
+    feature/, bugfix/, hotfix/, docs/, team/
+  Examples: feature/user-login, team/backend/order-service, feature/DS-142-login-validation.
+  team/ requires at least three segments (team/area/task). Other prefixes require exactly two.
+  Vague slugs (wip, work, temp) and long-lived patterns are rejected on create.
+  Existing non-compliant branches (created with --no-verify) are reported by migit doctor.
+
 ─── PHASE: Repository locking (Phase 19) ───
 ADDED:
   • src/core/repository-lock.ts — RepositoryLock.acquire()/release() via fs.open("wx")
@@ -437,6 +515,8 @@ When you run `migit <command>`:
   ├── .migit/
   │   ├── HEAD              ← "ref: refs/heads/main" (active branch)
   │   ├── config.json       ← author + AI provider (never stores API keys)
+  │   ├── policy.json       ← branch/merge policies (declarative only, no shell commands)
+  │   ├── ownership.json    ← path → team ownership rules (warnings only)
   │   ├── index             ← JSON array of staged/tracked files
   │   ├── history.log       ← JSONL command audit log
   │   ├── objects/          ← content-addressed blobs, trees, and commits (gzip)
@@ -531,9 +611,12 @@ history.log entry format (one JSON object per line):
   • Staged: added / modified / deleted (HEAD ≠ index)
   • Working: modified / deleted / untracked (index ≠ disk)
 
-5.4  migit commit -m "message"
+5.4  migit commit -m "message" [--override-policy]
   • Lists files in this commit (new file / modified / deleted) before writing
   • Blocks with error if index matches HEAD (nothing to commit)
+  • Blocks direct commits to protected branches (policy.json); suggests working branch commands
+  • --override-policy: maintainer bypass; logs policyOverride + branch to history.log
+  • Ownership warnings for team/* branches changing paths owned by another team (non-blocking)
   • Builds tree object from complete index via objectStore.writeTree()
   • Creates commit with parents: [current-branch-tip] or [] for first commit
   • Sets generation = max(parent generations) + 1 (or 1 for root)
@@ -557,10 +640,12 @@ history.log entry format (one JSON object per line):
   • Does NOT implement --graph (deferred until merge command lands)
   • Prints hash, author, date, message
 
-5.7  migit branch [name] [-d]
-  • No name: list branches, * marks current
-  • With name: create branch at current HEAD
+5.7  migit branch [name] [-d] [--standards] [--no-verify]
+  • No name: list branches, * marks current (includes nested names like feature/login)
+  • With name: create branch at current HEAD (validates naming standards)
   • With -d: delete branch ref file
+  • --standards: print allowed prefixes and examples
+  • --no-verify: skip naming standards when creating a branch
   • Safety rules (see section 10)
 
 5.8  migit checkout <branch> [-f|--force]
@@ -727,9 +812,32 @@ Branch name validation (src/utils/branch-name.ts):
   Rejects: ../main, feature/auth?, feature auth, empty, .lock suffix, etc.
   Allows: main, feature/auth, bugfix-123
 
+Branch naming standards (src/utils/branch-standards.ts):
+  Enforced on branch create (unless --no-verify). Configurable via .migit/config.json branches.
+  Trunk main exempt. Allowed prefixes: feature, bugfix, hotfix, docs, team.
+  feature/user-login, bugfix/token-expiry, team/backend/order-service are valid.
+  Rejects prefix-only names (feature), vague slugs (wip), and long-lived patterns.
+
+Nested branch refs:
+  Branch names with slashes (feature/login) stored at .migit/refs/heads/feature/login.
+  listBranches, checkout, merge, and delete all use the full slash-separated name.
+
 Create branch:
   Rejects if branch name already exists.
-  Rejects invalid names.
+  Rejects invalid names (branch-name.ts), policy patterns (policy.json), and standards (config.json branches).
+
+Branch policies (src/core/policy-store.ts, src/utils/branch-policy.ts):
+  Stored in .migit/policy.json — created on init with defaults matching team conventions.
+  allowedBranchPatterns (globs): feature/*, bugfix/*, hotfix/*, docs/*, team/*.
+  protectedBranches: direct commits blocked after the first commit (merge --continue still allowed).
+  requireCleanWorkingTreeForMerge: when true (default), merge requires clean tree unless --force.
+  warnChangedFilesAbove / warnSharedPaths: non-blocking warnings on commit and merge.
+  Rejects policy.json fields like hooks, commands, scripts (no executable config).
+
+Team ownership (src/core/ownership-store.ts, src/utils/ownership-warnings.ts):
+  Stored in .migit/ownership.json — path globs mapped to teams (backend, frontend, etc.).
+  On migit commit, team/<team>/... branches get warnings when staged paths belong to another team.
+  Warnings only — commits are never blocked for ownership mismatches.
 
 Delete branch:
   Rejects if branch does not exist.
@@ -743,6 +851,9 @@ Delete branch:
 IntegrityChecker (src/core/integrity-checker.ts) verifies:
 
   • config.json exists; no forbidden secret fields
+  • policy.json exists and is valid JSON (no executable command fields)
+  • Branch naming standards — warns on existing refs that violate conventions
+  • Branch policy patterns — warns on branches not matching allowedBranchPatterns
   • .migit/HEAD exists and has valid format
   • HEAD points to an existing branch ref
   • Every branch ref points to valid 64-char commit hash
@@ -935,7 +1046,10 @@ Output: DOCUMENTATION.md via atomicWrite (default path configurable with -o).
   ignore.ts           — shouldIgnorePath(); re-exports IgnoreRules
   ignore-rules.ts     — .migitignore parser + matcher
   sensitive-files.ts  — .env, credentials, keys detection
-  branch-name.ts      — branch name validation
+  branch-name.ts      — branch name validation (path safety, invalid chars)
+  branch-standards.ts — prefix/slug naming conventions for task branches
+  branch-policy.ts    — policy.json enforcement and warnings
+  ownership-warnings.ts — team ownership path matching and commit warnings
   add-scope.ts        — scoped deletion logic for migit add
   atomic-write.ts     — crash-safe file writes
   redact-secrets.ts   — strip API keys from strings
@@ -1069,9 +1183,13 @@ migit/
     └── types/
         └── index.ts
 
-tests/                          Node.js native test runner + tsx (73 tests)
+tests/                          Node.js native test runner + tsx (145 tests)
 ├── helpers/
 │   └── temp-repo.ts            Temp repo fixture (init + cleanup)
+├── ownership.test.ts           ownership.json, team path warnings on commit
+├── protected-main.test.ts      protected main commits, --override-policy, history
+├── policy.test.ts              policy.json, protected branches, merge warnings
+├── branch-standards.test.ts    Nested refs, naming standards, doctor warnings
 ├── object-store.test.ts        Blob/tree/commit headers, verifyStorage
 ├── status-engine.test.ts       Three-way status (staged/working/untracked)
 ├── add-scope.test.ts           Scoped deletions (add src/ must not touch lib/)
@@ -1187,8 +1305,11 @@ Coverage by area:
   Integrity/doctor   — healthy repo, missing index blobs, malformed commit trees
   Path guard         — rejects paths outside repository root
   Ancestry / merge   — isAncestor, findMergeBase, fast-forward merge, generation cache
+  Branch standards   — nested refs, prefix validation, --no-verify, doctor warnings
+  Branch policies    — policy.json, protected commits, pattern globs, merge warnings
+  Team ownership     — ownership.json path rules, non-blocking commit warnings
 
-Total: 111 tests in 33 suites (npm test).
+Total: 145 tests in 48 suites (npm test).
 
 Not yet covered: Gemini API calls (mocked via fallback tests only), document
 generators, full CLI end-to-end via subprocess, concurrent operations.
@@ -1207,7 +1328,7 @@ generators, full CLI end-to-end via subprocess, concurrent operations.
   • Express/React/Mongoose analyzers use simple regex (not AST parsing)
   • Single author per commit (no co-authors)
   • No interactive staging (add -p) or partial hunk staging
-  • Branch names validated but not as strictly as Git's full ref rules
+  • Branch names validated for path safety and simple team standards (feature/, bugfix/, etc.)
   • migit status UX minimal (clean repo prints nothing; no Git-style sections)
 
 23. REMOVED / DEPRECATED BEHAVIORS (do not reintroduce without migration)

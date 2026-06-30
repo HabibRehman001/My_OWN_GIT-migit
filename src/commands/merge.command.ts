@@ -9,6 +9,11 @@ import { formatMergePreview } from '../core/merge/merge-preview.js';
 import { conflictDescription } from '../core/merge/tree-merge.js';
 import { withHistoryAction } from '../cli/with-history.js';
 import { MiGitError } from '../utils/errors.js';
+import {
+  collectFastForwardMergePolicyWarnings,
+  collectMergePolicyWarnings,
+  formatPolicyWarnings,
+} from '../utils/branch-policy.js';
 
 function shortHash(hash: string): string {
   return hash.slice(0, 7);
@@ -63,6 +68,12 @@ export function registerMergeCommand(program: Command): void {
             throw new MiGitError('Merge stopped: branch name required for --preview.');
           }
           const preview = await engine.preview(branch);
+          const policy = await repo.policyStore.load();
+          const policyWarnings = collectMergePolicyWarnings(preview, policy);
+          if (policyWarnings.length > 0) {
+            console.log(formatPolicyWarnings(policyWarnings));
+            console.log();
+          }
           console.log(formatMergePreview(preview));
           return;
         }
@@ -74,6 +85,7 @@ export function registerMergeCommand(program: Command): void {
         }
 
         const result = await engine.merge(branch, { force: options.force });
+        const policy = await repo.policyStore.load();
 
         if (result.type === 'already-up-to-date') {
           console.log('Already up to date.');
@@ -85,6 +97,13 @@ export function registerMergeCommand(program: Command): void {
         }
 
         if (result.type === 'conflicts') {
+          const preview = await engine.preview(branch);
+          const policyWarnings = collectMergePolicyWarnings(preview, policy);
+          if (policyWarnings.length > 0) {
+            console.log(formatPolicyWarnings(policyWarnings));
+            console.log();
+          }
+
           console.log('Automatic merge failed; fix conflicts and commit the result.');
           console.log();
           console.log(`${result.conflicts.length} conflict${result.conflicts.length === 1 ? '' : 's'}:`);
@@ -95,6 +114,12 @@ export function registerMergeCommand(program: Command): void {
           console.log('Merge paused — no commit was created.');
           console.log(`Resolve conflicts, then complete the merge when ready.`);
           return;
+        }
+
+        const ffWarnings = collectFastForwardMergePolicyWarnings(result.filesUpdated, policy);
+        if (ffWarnings.length > 0) {
+          console.log(formatPolicyWarnings(ffWarnings));
+          console.log();
         }
 
         console.log('Fast-forward merge');

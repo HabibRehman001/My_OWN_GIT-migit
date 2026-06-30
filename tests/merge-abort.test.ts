@@ -23,8 +23,8 @@ async function setupContentConflictMerge(
   await repo.add(['src/auth/token.ts', 'package-lock.json']);
   await repo.commit('base');
 
-  await repo.createBranch('feature-login');
-  await new CheckoutEngine(repo).checkout('feature-login');
+  await repo.createBranch('feature/login');
+  await new CheckoutEngine(repo).checkout('feature/login');
   await writeProjectFile(root, 'src/auth/token.ts', 'feature-token');
   await writeProjectFile(root, 'package-lock.json', 'feature-lock');
   await repo.add(['src/auth/token.ts', 'package-lock.json']);
@@ -36,7 +36,7 @@ async function setupContentConflictMerge(
   await repo.add(['src/auth/token.ts', 'package-lock.json']);
   const mainHead = await repo.commit('main');
 
-  await new MergeEngine(repo).merge('feature-login');
+  await new MergeEngine(repo).merge('feature/login');
 
   return { mainHead };
 }

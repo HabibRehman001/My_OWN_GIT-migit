@@ -15,8 +15,8 @@ describe('checkout restoration integration', () => {
       await repo.add(['.']);
       await repo.commit('on main');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature-only.txt', 'feature');
       await repo.add(['feature-only.txt']);
       await repo.commit('on feature');
@@ -41,13 +41,13 @@ describe('checkout restoration integration', () => {
       await repo.add(['base.txt']);
       await repo.commit('initial');
 
-      await repo.createBranch('other');
+      await repo.createBranch('bugfix/other-task');
       await writeProjectFile(root, 'dirty.txt', 'change');
       await repo.add(['dirty.txt']);
 
-      await assert.rejects(() => new CheckoutEngine(repo).checkout('other'));
-      await new CheckoutEngine(repo).checkout('other', { force: true });
-      assert.equal(await repo.getCurrentBranch(), 'other');
+      await assert.rejects(() => new CheckoutEngine(repo).checkout('bugfix/other-task'));
+      await new CheckoutEngine(repo).checkout('bugfix/other-task', { force: true });
+      assert.equal(await repo.getCurrentBranch(), 'bugfix/other-task');
     } finally {
       await cleanup();
     }

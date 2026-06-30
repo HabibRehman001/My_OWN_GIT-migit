@@ -11,8 +11,8 @@ describe('log first-parent chain', () => {
       await repo.add(['base.txt']);
       const rootHash = await repo.commit('root');
 
-      await repo.createBranch('feature');
-      await new CheckoutEngine(repo).checkout('feature');
+      await repo.createBranch('feature/sample');
+      await new CheckoutEngine(repo).checkout('feature/sample');
       await writeProjectFile(root, 'feature.txt', 'feature');
       await repo.add(['feature.txt']);
       const featureTip = await repo.commit('on feature');

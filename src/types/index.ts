@@ -70,6 +70,50 @@ export interface RefInfo {
 }
 
 /**
+ * MiGitPolicy — repository branch and merge policies in `.migit/policy.json`.
+ * No shell commands or executable hooks — declarative rules only.
+ */
+export interface MiGitPolicy {
+  version: number;
+  defaultBranch: string;
+  protectedBranches: string[];
+  allowedBranchPatterns: string[];
+  requireCleanWorkingTreeForMerge: boolean;
+  preventDirectCommitToProtectedBranches: boolean;
+  warnChangedFilesAbove: number;
+  warnSharedPaths: boolean;
+}
+
+/**
+ * OwnershipRule — maps a path glob to a owning team in `.migit/ownership.json`.
+ */
+export interface OwnershipRule {
+  pattern: string;
+  team: string;
+}
+
+/**
+ * MiGitOwnership — team ownership rules for path-based coordination warnings.
+ */
+export interface MiGitOwnership {
+  rules: OwnershipRule[];
+}
+
+/**
+ * BranchStandardsConfig — optional branch naming rules in `.migit/config.json`.
+ */
+export interface BranchStandardsConfig {
+  /** When false, standards are not enforced (default: true). */
+  enabled?: boolean;
+  /** Trunk branch name (default: main). Always exempt from prefix rules. */
+  defaultBranch?: string;
+  /** First path segment allowed for task branches (default: feature, bugfix, hotfix, docs, team). */
+  allowedPrefixes?: string[];
+  /** Minimum length for task slug segments (default: 3). */
+  minDescriptionLength?: number;
+}
+
+/**
  * MiGitConfig — repository settings stored in `.migit/config.json`.
  */
 export interface MiGitConfig {
@@ -81,4 +125,5 @@ export interface MiGitConfig {
     provider: string;
     model?: string;
   };
+  branches?: BranchStandardsConfig;
 }
