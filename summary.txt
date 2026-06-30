@@ -18,7 +18,7 @@ update the affected sections below (commands, core modules, tests, limitations).
 ADDED:
   • npm test — Node built-in test runner + tsx (tests/**/*.test.ts)
   • tests/helpers/temp-repo.ts — isolated /tmp repos per test
-  • 37 test files, 145 tests (see section 21)
+  • 38 test files, 151 tests (see section 21)
 HOW IT WORKS:
   Each test creates its own temp directory, runs migit core APIs, asserts, cleanup.
   No Jest — zero extra test framework beyond tsx for TypeScript import.
@@ -238,6 +238,22 @@ HOW IT WORKS:
     >>>>>>> incoming:<branch>
   Non-conflicting lines before/after each conflict are still auto-merged into the marked file.
   Binary and add-add / modify-delete conflicts still have no marked blob.
+
+─── PHASE: Predict likely conflicts early (Phase 24) ───
+ADDED:
+  • src/core/merge/conflict-risk.ts — hash-only overlap analysis since merge base
+  • migit branch risk <branch> — standalone conflict risk report
+  • pathsChangedSinceBase(), computePossibleOverlap(), isHighRiskGeneratedPath()
+  • tests/conflict-risk.test.ts — unit + integration risk report tests
+CHANGED:
+  • migit merge <branch> --preview — prepends Conflict risk report before merge preview
+  • merge-preview.ts — formatMergePreviewForBranch(), formatMergePreviewWithRisk()
+HOW IT WORKS:
+  Compares paths changed on current branch vs incoming branch since merge base (hash-only, no blob reads).
+  likelyConflicts = ourChangedPaths ∩ theirChangedPaths.
+  Output sections: Low risk (single-branch changes), Possible overlap, High-risk generated files
+  (package-lock.json, route indexes, config files, etc.).
+  Warnings only — does not promise conflicts will occur. Reuses existing merge-base and tree loading.
 
 ─── PHASE: Team ownership warnings (Phase 23) ───
 ADDED:
@@ -648,6 +664,11 @@ history.log entry format (one JSON object per line):
   • --no-verify: skip naming standards when creating a branch
   • Safety rules (see section 10)
 
+5.7b migit branch risk <incomingBranch>
+  • Hash-only conflict risk report before merging
+  • Shows low-risk (single-branch) changes, possible path overlap, high-risk generated files
+  • Same analysis included at top of migit merge <branch> --preview
+
 5.8  migit checkout <branch> [-f|--force]
   • Validates branch exists and has commits
   • Dirty-tree protection (default): blocks if staged changes, unstaged changes
@@ -658,7 +679,7 @@ history.log entry format (one JSON object per line):
 
 5.9  migit merge [branch] [-f|--force] [--preview] [--continue] [--abort]
   • Merges the named branch into the currently checked-out branch
-  • --preview: show merge base, per-path stats, predicted conflicts; no file changes
+  • --preview: conflict risk report + merge analysis; no file changes
   • --continue: create merge commit after all conflicts resolved via migit resolve
   • --abort: restore pre-merge tree from ourCommit and clear merge metadata
   • Fast-forward when current tip is an ancestor of the other branch
@@ -1183,9 +1204,10 @@ migit/
     └── types/
         └── index.ts
 
-tests/                          Node.js native test runner + tsx (145 tests)
+tests/                          Node.js native test runner + tsx (151 tests)
 ├── helpers/
 │   └── temp-repo.ts            Temp repo fixture (init + cleanup)
+├── conflict-risk.test.ts       hash-only overlap analysis, branch risk report
 ├── ownership.test.ts           ownership.json, team path warnings on commit
 ├── protected-main.test.ts      protected main commits, --override-policy, history
 ├── policy.test.ts              policy.json, protected branches, merge warnings
@@ -1308,8 +1330,9 @@ Coverage by area:
   Branch standards   — nested refs, prefix validation, --no-verify, doctor warnings
   Branch policies    — policy.json, protected commits, pattern globs, merge warnings
   Team ownership     — ownership.json path rules, non-blocking commit warnings
+  Conflict risk      — branch risk / merge --preview overlap analysis (hash-only)
 
-Total: 145 tests in 48 suites (npm test).
+Total: 151 tests in 50 suites (npm test).
 
 Not yet covered: Gemini API calls (mocked via fallback tests only), document
 generators, full CLI end-to-end via subprocess, concurrent operations.

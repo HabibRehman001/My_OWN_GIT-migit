@@ -14,6 +14,10 @@ import {
   summarizeTreeMerge,
 } from './tree-merge.js';
 import { countTreeChanges } from '../working-tree.js';
+import {
+  computeConflictRisk,
+  formatConflictRiskReport,
+} from './conflict-risk.js';
 
 export type MergePreviewKind =
   | 'already-up-to-date'
@@ -175,7 +179,23 @@ function mergeTypeLabel(mergeType: MergePreviewKind): string {
 }
 
 export function formatMergePreview(result: MergePreviewResult): string {
-  const lines: string[] = ['Merge preview', ''];
+  return formatMergePreviewWithRisk(result, null);
+}
+
+export function formatMergePreviewWithRisk(
+  result: MergePreviewResult,
+  riskReport: string | null,
+): string {
+  const lines: string[] = [];
+
+  if (riskReport) {
+    lines.push(riskReport);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  lines.push('Merge preview', '');
 
   lines.push(`Current branch: ${result.currentBranch}`);
   lines.push(`Incoming branch: ${result.incomingBranch}`);
@@ -227,4 +247,13 @@ export function formatMergePreview(result: MergePreviewResult): string {
   }
 
   return lines.join('\n');
+}
+
+export async function formatMergePreviewForBranch(
+  repo: Repository,
+  branchName: string,
+  preview: MergePreviewResult,
+): Promise<string> {
+  const risk = await computeConflictRisk(repo, branchName);
+  return formatMergePreviewWithRisk(preview, formatConflictRiskReport(risk));
 }

@@ -5,7 +5,7 @@
 import type { Command } from 'commander';
 import { Repository } from '../core/repository.js';
 import { MergeEngine } from '../core/merge/merge-engine.js';
-import { formatMergePreview } from '../core/merge/merge-preview.js';
+import { formatMergePreviewForBranch } from '../core/merge/merge-preview.js';
 import { conflictDescription } from '../core/merge/tree-merge.js';
 import { withHistoryAction } from '../cli/with-history.js';
 import { MiGitError } from '../utils/errors.js';
@@ -74,7 +74,7 @@ export function registerMergeCommand(program: Command): void {
             console.log(formatPolicyWarnings(policyWarnings));
             console.log();
           }
-          console.log(formatMergePreview(preview));
+          console.log(await formatMergePreviewForBranch(repo, branch, preview));
           return;
         }
 

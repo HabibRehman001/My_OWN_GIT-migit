@@ -8,6 +8,10 @@ import type { Command } from 'commander';
 import { Repository } from '../core/repository.js';
 import { withHistoryAction } from '../cli/with-history.js';
 import { formatBranchStandardsHelp, resolveBranchStandards } from '../utils/branch-standards.js';
+import {
+  computeConflictRisk,
+  formatConflictRiskReport,
+} from '../core/merge/conflict-risk.js';
 
 /**
  * registerBranchCommand — attaches `branch [name]` with optional delete flag.
@@ -18,6 +22,17 @@ import { formatBranchStandardsHelp, resolveBranchStandards } from '../utils/bran
  *   - Name + -d: delete the named branch file.
  */
 export function registerBranchCommand(program: Command): void {
+  program
+    .command('branch risk <incomingBranch>')
+    .description('Predict likely merge conflicts with another branch (hash-only analysis)')
+    .action(
+      withHistoryAction('branch risk', async (incomingBranch: string) => {
+        const repo = Repository.open();
+        const report = await computeConflictRisk(repo, incomingBranch);
+        console.log(formatConflictRiskReport(report));
+      }),
+    );
+
   program
     .command('branch [name]')
     .description('List, create, or delete branches')
